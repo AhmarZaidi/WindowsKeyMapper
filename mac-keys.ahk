@@ -67,8 +67,18 @@ global TabRight := "^]"
 global BrowserBackKey := "!["
 global BrowserForwardKey := "!]"
 
+; Global Theme Colors (dynamically populated based on Windows Personalizations)
+global ThemeBg := "121214"
+global ThemeFg := "DCDCDC"
+global ThemeControlBg := "1A1A1E"
+global ToggleOnBg := "Background00FF88 c121214"
+global ToggleOffBg := "Background2D2D30 cA0A0A0"
+global EditBg := "Background242428 cFFFFFF"
+global GroupBorderColor := "DCDCDC"
+
 ; --- INITIALIZATION ---
 LoadSettings()
+LoadTheme()
 SetupTrayMenu()
 
 if (Enabled) {
@@ -249,6 +259,81 @@ IsCaretMovementActive(*) {
     return IsNotTerminalActive() and not IsBrowserActive()
 }
 
+; ==============================================================================
+; SYSTEM THEME DETECTION & MODERN DYNAMIC TOGGLE SWITCH CONTROLS
+; ==============================================================================
+
+IsSystemLightTheme() {
+    try {
+        return RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme") == 1
+    } catch {
+        return 0
+    }
+}
+
+LoadTheme() {
+    global ThemeBg, ThemeFg, ThemeControlBg, ToggleOnBg, ToggleOffBg, EditBg, GroupBorderColor
+    if IsSystemLightTheme() {
+        ThemeBg := "F3F3F3"
+        ThemeFg := "1A1A1A"
+        ThemeControlBg := "FFFFFF"
+        ToggleOnBg := "Background4CAF50 cWhite"
+        ToggleOffBg := "BackgroundD0D0D0 c555555"
+        EditBg := "BackgroundFFFFFF c000000"
+        GroupBorderColor := "808080"
+    } else {
+        ThemeBg := "121214"
+        ThemeFg := "DCDCDC"
+        ThemeControlBg := "1A1A1E"
+        ToggleOnBg := "Background00FF88 c121214"
+        ToggleOffBg := "Background2D2D30 cA0A0A0"
+        EditBg := "Background242428 cFFFFFF"
+        GroupBorderColor := "DCDCDC"
+    }
+}
+
+AddToggleSwitch(GuiObj, x, y, defaultVal, textLabel) {
+    global ToggleOnBg, ToggleOffBg, ThemeFg
+    
+    ; Add descriptive text label (styled with current theme text color)
+    GuiObj.Add("Text", "x" . x . " y" . y . " w160 r1 c" . ThemeFg, textLabel)
+    
+    btnText := defaultVal ? "ON" : "OFF"
+    btnBg := defaultVal ? ToggleOnBg : ToggleOffBg
+    
+    ; Add toggle button
+    toggleBtn := GuiObj.Add("Text", "x" . (x + 165) . " y" . (y - 2) . " w45 h20 Center +Border +0x200 " . btnBg, btnText)
+    toggleBtn.OnEvent("Click", OnToggleClick)
+    
+    return toggleBtn
+}
+
+OnToggleClick(Ctrl, *) {
+    global ToggleOnBg, ToggleOffBg
+    if (Ctrl.Text == "ON") {
+        Ctrl.Text := "OFF"
+        Ctrl.Opt(ToggleOffBg)
+    } else {
+        Ctrl.Text := "ON"
+        Ctrl.Opt(ToggleOnBg)
+    }
+}
+
+SetToggleState(toggleCtrl, val) {
+    global ToggleOnBg, ToggleOffBg
+    if (val) {
+        toggleCtrl.Text := "ON"
+        toggleCtrl.Opt(ToggleOnBg)
+    } else {
+        toggleCtrl.Text := "OFF"
+        toggleCtrl.Opt(ToggleOffBg)
+    }
+}
+
+GetToggleValue(toggleCtrl) {
+    return (toggleCtrl.Text == "ON") ? 1 : 0
+}
+
 ; Action Functions
 DoCapsLockRemap(*) {
     Send("{Blind}{Tab}")
@@ -381,93 +466,93 @@ CreateGui() {
     global Enabled, CapsLockToTab, HighPriority, LineModifier, WordModifier, TabLeft, TabRight
 
     MyGui := Gui("-MinimizeBox -MaximizeBox", "KepMapper Settings Panel")
-    MyGui.BackColor := "121214"
-    MyGui.SetFont("s10 cDCDCDC", "Segoe UI")
+    MyGui.BackColor := ThemeBg
+    MyGui.SetFont("s10 c" . ThemeFg, "Segoe UI")
     
-    TabCtrl := MyGui.Add("Tab3", "w550 h460 cDCDCDC", ["Core Mappings", "Hotkeys Checklist", "Conflict Reference", "About"])
+    TabCtrl := MyGui.Add("Tab3", "w550 h460 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "Conflict Reference", "About"])
     
     ; --- TAB 1: Core Mappings ---
     TabCtrl.UseTab(1)
     
-    MyGui.Add("GroupBox", "w510 h95 cDCDCDC x20 y50", "General Hardware & Engine Options")
-    ChkCapsLockToTab := MyGui.Add("Checkbox", "x40 y75 w460", "Remap CapsLock to Tab (perfect for broken physical Tab keys)")
-    ChkHighPriority := MyGui.Add("Checkbox", "x40 y108 w460", "High Priority Mode (runs hotkeys using physical hook, overrides other apps)")
+    MyGui.Add("GroupBox", "w510 h105 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
+    ChkCapsLockToTab := AddToggleSwitch(MyGui, 40, 75, CapsLockToTab, "Remap CapsLock to Tab")
+    ChkHighPriority := AddToggleSwitch(MyGui, 40, 110, HighPriority, "High Priority Hook Mode")
     
-    MyGui.Add("GroupBox", "w510 h110 cDCDCDC x20 y155", "Typing Modifier Assignments")
-    MyGui.Add("Text", "x40 y180", "Line-level modifier:")
-    DDLLineModifier := MyGui.Add("DropDownList", "x200 y175 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y180 c888888", "(Mac Cmd-like line tasks)")
+    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y165", "Typing Modifier Assignments")
+    MyGui.Add("Text", "x40 y190 c" . ThemeFg, "Line-level modifier:")
+    DDLLineModifier := MyGui.Add("DropDownList", "x200 y185 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x315 y190 c888888", "(Mac Cmd-like line tasks)")
     
-    MyGui.Add("Text", "x40 y220", "Word-level modifier:")
-    DDLWordModifier := MyGui.Add("DropDownList", "x200 y215 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y220 c888888", "(Mac Option-like word tasks)")
+    MyGui.Add("Text", "x40 y230 c" . ThemeFg, "Word-level modifier:")
+    DDLWordModifier := MyGui.Add("DropDownList", "x200 y225 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x315 y230 c888888", "(Mac Option-like word tasks)")
     
-    MyGui.Add("GroupBox", "w510 h150 cDCDCDC x20 y275", "Browser Navigation Shortcuts")
-    MyGui.Add("Text", "x40 y300", "Tab Navigation:")
-    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y295 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y300", "+")
-    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y295 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("GroupBox", "w510 h150 c" . GroupBorderColor . " x20 y285", "Browser Navigation Shortcuts")
+    MyGui.Add("Text", "x40 y310 c" . ThemeFg, "Tab Navigation:")
+    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y305 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y310 c" . ThemeFg, "+")
+    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y305 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
     
-    MyGui.Add("Text", "x40 y345", "History Navigation:")
-    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y340 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y345", "+")
-    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y340 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("Text", "x40 y355 c" . ThemeFg, "History Navigation:")
+    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y350 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y355 c" . ThemeFg, "+")
+    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y350 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
     
-    MyGui.Add("Text", "x40 y390 c888888", "Configuring the base key automatically maps the opposite side key.")
+    MyGui.Add("Text", "x40 y400 c888888", "Configuring the base key automatically maps the opposite side key.")
 
     ; --- TAB 2: Hotkeys Checklist ---
     TabCtrl.UseTab(2)
-    MyGui.Add("GroupBox", "w510 h380 cDCDCDC x20 y50", "Toggle Specific Actions & Shortcuts")
+    MyGui.Add("GroupBox", "w510 h380 c" . GroupBorderColor . " x20 y50", "Toggle Specific Actions & Shortcuts")
     
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x40 y75 cFFFFFF", "Line-Level Operations")
+    MyGui.Add("Text", "x40 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Line-Level Operations")
     MyGui.SetFont("norm s10")
-    ChkDeleteLine := MyGui.Add("Checkbox", "x40 y105 w220", "Delete whole line (Mod+BS)")
-    ChkSelectToEndOfLine := MyGui.Add("Checkbox", "x40 y135 w220", "Select to end (Mod+Sh+Rt)")
-    ChkSelectToStartOfLine := MyGui.Add("Checkbox", "x40 y165 w220", "Select to start (Mod+Sh+Lf)")
-    ChkMoveToEndOfLine := MyGui.Add("Checkbox", "x40 y195 w220", "Move to end (Mod+Rt)")
-    ChkMoveToStartOfLine := MyGui.Add("Checkbox", "x40 y225 w220", "Move to start (Mod+Lf)")
-    ChkMoveToTop := MyGui.Add("Checkbox", "x40 y255 w220", "Move to top (Ctrl+Up)")
-    ChkMoveToBottom := MyGui.Add("Checkbox", "x40 y285 w220", "Move to bottom (Ctrl+Dn)")
-    ChkSelectToTop := MyGui.Add("Checkbox", "x40 y315 w220", "Select to top (Ctrl+Sh+Up)")
-    ChkSelectToBottom := MyGui.Add("Checkbox", "x40 y345 w220", "Select to bottom (Ctrl+Sh+Dn)")
+    ChkDeleteLine := AddToggleSwitch(MyGui, 40, 105, 1, "Delete whole line")
+    ChkSelectToEndOfLine := AddToggleSwitch(MyGui, 40, 135, 1, "Select to end")
+    ChkSelectToStartOfLine := AddToggleSwitch(MyGui, 40, 165, 1, "Select to start")
+    ChkMoveToEndOfLine := AddToggleSwitch(MyGui, 40, 195, 1, "Move to end")
+    ChkMoveToStartOfLine := AddToggleSwitch(MyGui, 40, 225, 1, "Move to start")
+    ChkMoveToTop := AddToggleSwitch(MyGui, 40, 255, 1, "Move to top")
+    ChkMoveToBottom := AddToggleSwitch(MyGui, 40, 285, 1, "Move to bottom")
+    ChkSelectToTop := AddToggleSwitch(MyGui, 40, 315, 1, "Select to top")
+    ChkSelectToBottom := AddToggleSwitch(MyGui, 40, 345, 1, "Select to bottom")
 
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x280 y75 cFFFFFF", "Word-Level & Navigation")
+    MyGui.Add("Text", "x280 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Word-Level & Navigation")
     MyGui.SetFont("norm s10")
-    ChkDeleteWordLeft := MyGui.Add("Checkbox", "x280 y105 w220", "Delete word left (Mod+BS)")
-    ChkSelectWordRight := MyGui.Add("Checkbox", "x280 y135 w220", "Select word right (Mod+Sh+Rt)")
-    ChkSelectWordLeft := MyGui.Add("Checkbox", "x280 y165 w220", "Select word left (Mod+Sh+Lf)")
-    ChkMoveWordRight := MyGui.Add("Checkbox", "x280 y195 w220", "Move word right (Mod+Rt)")
-    ChkMoveWordLeft := MyGui.Add("Checkbox", "x280 y225 w220", "Move word left (Mod+Lf)")
+    ChkDeleteWordLeft := AddToggleSwitch(MyGui, 280, 105, 1, "Delete word left")
+    ChkSelectWordRight := AddToggleSwitch(MyGui, 280, 135, 1, "Select word right")
+    ChkSelectWordLeft := AddToggleSwitch(MyGui, 280, 165, 1, "Select word left")
+    ChkMoveWordRight := AddToggleSwitch(MyGui, 280, 195, 1, "Move word right")
+    ChkMoveWordLeft := AddToggleSwitch(MyGui, 280, 225, 1, "Move word left")
     
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x280 y255 cFFFFFF", "Browser Navigation")
+    MyGui.Add("Text", "x280 y255 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Browser Navigation")
     MyGui.SetFont("norm s10")
-    ChkBrowserBack := MyGui.Add("Checkbox", "x280 y285 w220", "Back history (Ctrl+[)")
-    ChkBrowserForward := MyGui.Add("Checkbox", "x280 y315 w220", "Forward history (Ctrl+])")
-    ChkBrowserTabLeft := MyGui.Add("Checkbox", "x280 y345 w220", "Tab switch left")
-    ChkBrowserTabRight := MyGui.Add("Checkbox", "x280 y375 w220", "Tab switch right")
+    ChkBrowserBack := AddToggleSwitch(MyGui, 280, 285, 1, "Back history")
+    ChkBrowserForward := AddToggleSwitch(MyGui, 280, 315, 1, "Forward history")
+    ChkBrowserTabLeft := AddToggleSwitch(MyGui, 280, 345, 1, "Tab switch left")
+    ChkBrowserTabRight := AddToggleSwitch(MyGui, 280, 375, 1, "Tab switch right")
 
     ; --- TAB 3: Conflict Reference ---
     TabCtrl.UseTab(3)
-    MyGui.Add("Text", "x20 y55", "Search standard Windows & Application hotkeys to avoid overlaps:")
-    SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 cFFFFFF Background242428 -E0x200")
+    MyGui.Add("Text", "x20 y55 c" . ThemeFg, "Search standard Windows & Application hotkeys to avoid overlaps:")
+    SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 " . EditBg . " -E0x200")
     SearchEdit.OnEvent("Change", OnSearchEditChange)
     
-    ShortcutLV := MyGui.Add("ListView", "x20 y115 w510 h310 cFFFFFF Background1A1A1E Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
+    ShortcutLV := MyGui.Add("ListView", "x20 y115 w510 h310 c" . ThemeFg . " Background" . ThemeControlBg . " Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
     ShortcutLV.ModifyCol(1, 120)
     ShortcutLV.ModifyCol(2, 180)
     ShortcutLV.ModifyCol(3, 110)
     ShortcutLV.ModifyCol(4, 80)
     
     PopulateConflictDatabase("")
-
+ 
     ; --- TAB 4: About ---
     TabCtrl.UseTab(4)
-    MyGui.SetFont("Bold s14 c00FF88")
+    MyGui.SetFont("Bold s14 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"))
     MyGui.Add("Text", "x20 y60", "KepMapper Utility")
-    MyGui.SetFont("norm s10 cDCDCDC")
+    MyGui.SetFont("norm s10 c" . ThemeFg)
     MyGui.Add("Text", "x20 y95 w510", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
     MyGui.Add("Text", "x20 y130 w510", "Utility Features:")
     MyGui.Add("Text", "x40 y155 w480", "• CapsLock remapped to Tab with Shift/Ctrl modifier inheritance.")
@@ -476,14 +561,14 @@ CreateGui() {
     MyGui.Add("Text", "x40 y230 w480", "• Fully searchable system shortcut conflict reference database.")
     MyGui.Add("Text", "x40 y255 w480", "• Low-priority (fallback) or High-priority (override) system hook mode.")
     
-    MyGui.Add("Text", "x20 y295 w510 c888888", "Status: Running (Uses 0% CPU when not processing keystrokes)")
-    ChkStartup := MyGui.Add("Checkbox", "x20 y325 w480", "Launch KepMapper automatically when logging in to Windows")
+    MyGui.Add("Text", "x20 y295 w510 c" . (IsSystemLightTheme() ? "555555" : "888888"), "Status: Running (Uses 0% CPU when not processing keystrokes)")
+    ChkStartup := AddToggleSwitch(MyGui, 20, 325, 0, "Windows Auto-Startup")
     
     MyGui.SetFont("norm s10")
     
     ; --- Bottom Controls ---
     TabCtrl.UseTab()
-    ChkEnabled := MyGui.Add("Checkbox", "x25 y478 w260 cFFFFFF", "Enable Typing Customizations (Master)")
+    ChkEnabled := AddToggleSwitch(MyGui, 20, 478, Enabled, "Enable Typing Remaps")
     
     SaveBtn := MyGui.Add("Button", "x300 y472 w110 h30 Default", "Save & Apply")
     SaveBtn.OnEvent("Click", OnSaveClick)
@@ -584,9 +669,9 @@ SetGuiValues() {
     global ChkStartup
     global Enabled, CapsLockToTab, HighPriority, LineModifier, WordModifier, TabLeft, TabRight
 
-    ChkCapsLockToTab.Value := CapsLockToTab
-    ChkHighPriority.Value := HighPriority
-    ChkEnabled.Value := Enabled
+    SetToggleState(ChkCapsLockToTab, CapsLockToTab)
+    SetToggleState(ChkHighPriority, HighPriority)
+    SetToggleState(ChkEnabled, Enabled)
     
     DDLLineModifier.Choose(GetIndexForModifier(LineModifier))
     DDLWordModifier.Choose(GetIndexForModifier(WordModifier))
@@ -635,28 +720,28 @@ SetGuiValues() {
     DDLTabRightMod.Choose(rightModIdx)
     DDLTabRightKey.Choose(rightKeyIdx)
     
-    ChkDeleteLine.Value := IniRead(SettingsFile, "Hotkeys", "DeleteLine", "1") == "1" ? 1 : 0
-    ChkSelectToEndOfLine.Value := IniRead(SettingsFile, "Hotkeys", "SelectToEndOfLine", "1") == "1" ? 1 : 0
-    ChkSelectToStartOfLine.Value := IniRead(SettingsFile, "Hotkeys", "SelectToStartOfLine", "1") == "1" ? 1 : 0
-    ChkMoveToEndOfLine.Value := IniRead(SettingsFile, "Hotkeys", "MoveToEndOfLine", "1") == "1" ? 1 : 0
-    ChkMoveToStartOfLine.Value := IniRead(SettingsFile, "Hotkeys", "MoveToStartOfLine", "1") == "1" ? 1 : 0
-    ChkMoveToTop.Value := IniRead(SettingsFile, "Hotkeys", "MoveToTop", "1") == "1" ? 1 : 0
-    ChkMoveToBottom.Value := IniRead(SettingsFile, "Hotkeys", "MoveToBottom", "1") == "1" ? 1 : 0
-    ChkSelectToTop.Value := IniRead(SettingsFile, "Hotkeys", "SelectToTop", "1") == "1" ? 1 : 0
-    ChkSelectToBottom.Value := IniRead(SettingsFile, "Hotkeys", "SelectToBottom", "1") == "1" ? 1 : 0
+    SetToggleState(ChkDeleteLine, IniRead(SettingsFile, "Hotkeys", "DeleteLine", "1") == "1")
+    SetToggleState(ChkSelectToEndOfLine, IniRead(SettingsFile, "Hotkeys", "SelectToEndOfLine", "1") == "1")
+    SetToggleState(ChkSelectToStartOfLine, IniRead(SettingsFile, "Hotkeys", "SelectToStartOfLine", "1") == "1")
+    SetToggleState(ChkMoveToEndOfLine, IniRead(SettingsFile, "Hotkeys", "MoveToEndOfLine", "1") == "1")
+    SetToggleState(ChkMoveToStartOfLine, IniRead(SettingsFile, "Hotkeys", "MoveToStartOfLine", "1") == "1")
+    SetToggleState(ChkMoveToTop, IniRead(SettingsFile, "Hotkeys", "MoveToTop", "1") == "1")
+    SetToggleState(ChkMoveToBottom, IniRead(SettingsFile, "Hotkeys", "MoveToBottom", "1") == "1")
+    SetToggleState(ChkSelectToTop, IniRead(SettingsFile, "Hotkeys", "SelectToTop", "1") == "1")
+    SetToggleState(ChkSelectToBottom, IniRead(SettingsFile, "Hotkeys", "SelectToBottom", "1") == "1")
     
-    ChkDeleteWordLeft.Value := IniRead(SettingsFile, "Hotkeys", "DeleteWordLeft", "1") == "1" ? 1 : 0
-    ChkSelectWordRight.Value := IniRead(SettingsFile, "Hotkeys", "SelectWordRight", "1") == "1" ? 1 : 0
-    ChkSelectWordLeft.Value := IniRead(SettingsFile, "Hotkeys", "SelectWordLeft", "1") == "1" ? 1 : 0
-    ChkMoveWordRight.Value := IniRead(SettingsFile, "Hotkeys", "MoveWordRight", "1") == "1" ? 1 : 0
-    ChkMoveWordLeft.Value := IniRead(SettingsFile, "Hotkeys", "MoveWordLeft", "1") == "1" ? 1 : 0
+    SetToggleState(ChkDeleteWordLeft, IniRead(SettingsFile, "Hotkeys", "DeleteWordLeft", "1") == "1")
+    SetToggleState(ChkSelectWordRight, IniRead(SettingsFile, "Hotkeys", "SelectWordRight", "1") == "1")
+    SetToggleState(ChkSelectWordLeft, IniRead(SettingsFile, "Hotkeys", "SelectWordLeft", "1") == "1")
+    SetToggleState(ChkMoveWordRight, IniRead(SettingsFile, "Hotkeys", "MoveWordRight", "1") == "1")
+    SetToggleState(ChkMoveWordLeft, IniRead(SettingsFile, "Hotkeys", "MoveWordLeft", "1") == "1")
     
-    ChkBrowserBack.Value := IniRead(SettingsFile, "Hotkeys", "BrowserBack", "1") == "1" ? 1 : 0
-    ChkBrowserForward.Value := IniRead(SettingsFile, "Hotkeys", "BrowserForward", "1") == "1" ? 1 : 0
-    ChkBrowserTabLeft.Value := IniRead(SettingsFile, "Hotkeys", "BrowserTabLeft", "1") == "1" ? 1 : 0
-    ChkBrowserTabRight.Value := IniRead(SettingsFile, "Hotkeys", "BrowserTabRight", "1") == "1" ? 1 : 0
+    SetToggleState(ChkBrowserBack, IniRead(SettingsFile, "Hotkeys", "BrowserBack", "1") == "1")
+    SetToggleState(ChkBrowserForward, IniRead(SettingsFile, "Hotkeys", "BrowserForward", "1") == "1")
+    SetToggleState(ChkBrowserTabLeft, IniRead(SettingsFile, "Hotkeys", "BrowserTabLeft", "1") == "1")
+    SetToggleState(ChkBrowserTabRight, IniRead(SettingsFile, "Hotkeys", "BrowserTabRight", "1") == "1")
     
-    ChkStartup.Value := FileExist(A_Startup "\KepMapper.lnk") ? 1 : 0
+    SetToggleState(ChkStartup, FileExist(A_Startup "\KepMapper.lnk") ? 1 : 0)
 }
 
 OnSaveClick(*) {
@@ -680,9 +765,9 @@ OnSaveClick(*) {
     }
 
     ; Save General
-    IniWrite(ChkEnabled.Value, SettingsFile, "General", "Enabled")
-    IniWrite(ChkCapsLockToTab.Value, SettingsFile, "General", "CapsLockToTab")
-    IniWrite(ChkHighPriority.Value, SettingsFile, "General", "HighPriority")
+    IniWrite(GetToggleValue(ChkEnabled), SettingsFile, "General", "Enabled")
+    IniWrite(GetToggleValue(ChkCapsLockToTab), SettingsFile, "General", "CapsLockToTab")
+    IniWrite(GetToggleValue(ChkHighPriority), SettingsFile, "General", "HighPriority")
     
     ; Save Modifiers
     IniWrite(DDLLineModifier.Text, SettingsFile, "Modifiers", "LineModifier")
@@ -700,29 +785,29 @@ OnSaveClick(*) {
     IniWrite(fwdNav, SettingsFile, "TabSwitching", "BrowserForward")
     
     ; Save Hotkey Checks
-    IniWrite(ChkDeleteLine.Value, SettingsFile, "Hotkeys", "DeleteLine")
-    IniWrite(ChkSelectToEndOfLine.Value, SettingsFile, "Hotkeys", "SelectToEndOfLine")
-    IniWrite(ChkSelectToStartOfLine.Value, SettingsFile, "Hotkeys", "SelectToStartOfLine")
-    IniWrite(ChkMoveToEndOfLine.Value, SettingsFile, "Hotkeys", "MoveToEndOfLine")
-    IniWrite(ChkMoveToStartOfLine.Value, SettingsFile, "Hotkeys", "MoveToStartOfLine")
-    IniWrite(ChkMoveToTop.Value, SettingsFile, "Hotkeys", "MoveToTop")
-    IniWrite(ChkMoveToBottom.Value, SettingsFile, "Hotkeys", "MoveToBottom")
-    IniWrite(ChkSelectToTop.Value, SettingsFile, "Hotkeys", "SelectToTop")
-    IniWrite(ChkSelectToBottom.Value, SettingsFile, "Hotkeys", "SelectToBottom")
+    IniWrite(GetToggleValue(ChkDeleteLine), SettingsFile, "Hotkeys", "DeleteLine")
+    IniWrite(GetToggleValue(ChkSelectToEndOfLine), SettingsFile, "Hotkeys", "SelectToEndOfLine")
+    IniWrite(GetToggleValue(ChkSelectToStartOfLine), SettingsFile, "Hotkeys", "SelectToStartOfLine")
+    IniWrite(GetToggleValue(ChkMoveToEndOfLine), SettingsFile, "Hotkeys", "MoveToEndOfLine")
+    IniWrite(GetToggleValue(ChkMoveToStartOfLine), SettingsFile, "Hotkeys", "MoveToStartOfLine")
+    IniWrite(GetToggleValue(ChkMoveToTop), SettingsFile, "Hotkeys", "MoveToTop")
+    IniWrite(GetToggleValue(ChkMoveToBottom), SettingsFile, "Hotkeys", "MoveToBottom")
+    IniWrite(GetToggleValue(ChkSelectToTop), SettingsFile, "Hotkeys", "SelectToTop")
+    IniWrite(GetToggleValue(ChkSelectToBottom), SettingsFile, "Hotkeys", "SelectToBottom")
     
-    IniWrite(ChkDeleteWordLeft.Value, SettingsFile, "Hotkeys", "DeleteWordLeft")
-    IniWrite(ChkSelectWordRight.Value, SettingsFile, "Hotkeys", "SelectWordRight")
-    IniWrite(ChkSelectWordLeft.Value, SettingsFile, "Hotkeys", "SelectWordLeft")
-    IniWrite(ChkMoveWordRight.Value, SettingsFile, "Hotkeys", "MoveWordRight")
-    IniWrite(ChkMoveWordLeft.Value, SettingsFile, "Hotkeys", "MoveWordLeft")
+    IniWrite(GetToggleValue(ChkDeleteWordLeft), SettingsFile, "Hotkeys", "DeleteWordLeft")
+    IniWrite(GetToggleValue(ChkSelectWordRight), SettingsFile, "Hotkeys", "SelectWordRight")
+    IniWrite(GetToggleValue(ChkSelectWordLeft), SettingsFile, "Hotkeys", "SelectWordLeft")
+    IniWrite(GetToggleValue(ChkMoveWordRight), SettingsFile, "Hotkeys", "MoveWordRight")
+    IniWrite(GetToggleValue(ChkMoveWordLeft), SettingsFile, "Hotkeys", "MoveWordLeft")
     
-    IniWrite(ChkBrowserBack.Value, SettingsFile, "Hotkeys", "BrowserBack")
-    IniWrite(ChkBrowserForward.Value, SettingsFile, "Hotkeys", "BrowserForward")
-    IniWrite(ChkBrowserTabLeft.Value, SettingsFile, "Hotkeys", "BrowserTabLeft")
-    IniWrite(ChkBrowserTabRight.Value, SettingsFile, "Hotkeys", "BrowserTabRight")
+    IniWrite(GetToggleValue(ChkBrowserBack), SettingsFile, "Hotkeys", "BrowserBack")
+    IniWrite(GetToggleValue(ChkBrowserForward), SettingsFile, "Hotkeys", "BrowserForward")
+    IniWrite(GetToggleValue(ChkBrowserTabLeft), SettingsFile, "Hotkeys", "BrowserTabLeft")
+    IniWrite(GetToggleValue(ChkBrowserTabRight), SettingsFile, "Hotkeys", "BrowserTabRight")
     
     ; Startup Setting
-    SetStartup(ChkStartup.Value)
+    SetStartup(GetToggleValue(ChkStartup))
     
     MyGui.Hide()
     TrayTip("KepMapper", "Settings saved successfully! Restarting engine...", 1)
