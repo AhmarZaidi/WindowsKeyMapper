@@ -159,12 +159,19 @@ RegisterAllHotkeys() {
     if (IniRead(SettingsFile, "Hotkeys", "SelectToStartOfLine", "1") == "1") {
         TryRegister(prefix . lineSym . "+Left", DoSelectToStartOfLine)
     }
+    
+    ; Exclude both command terminals and browsers from caret left/right line-jump remapping
+    ; so browsers natively receive Alt + Left/Right for history navigation
+    HotIf(IsCaretMovementActive)
     if (IniRead(SettingsFile, "Hotkeys", "MoveToEndOfLine", "1") == "1") {
         TryRegister(prefix . lineSym . "Right", DoMoveToEndOfLine)
     }
     if (IniRead(SettingsFile, "Hotkeys", "MoveToStartOfLine", "1") == "1") {
         TryRegister(prefix . lineSym . "Left", DoMoveToStartOfLine)
     }
+    
+    ; Restore standard terminal exclusion for remaining editing hotkeys
+    HotIf(IsNotTerminalActive)
     if (IniRead(SettingsFile, "Hotkeys", "MoveToTop", "1") == "1") {
         TryRegister(prefix . "^Up", DoMoveToTop)
     }
@@ -236,6 +243,10 @@ IsNotTerminalActive(*) {
         or WinActive("ahk_class ConsoleWindowClass") 
         or WinActive("ahk_exe powershell.exe") 
         or WinActive("ahk_exe cmd.exe"))
+}
+
+IsCaretMovementActive(*) {
+    return IsNotTerminalActive() and not IsBrowserActive()
 }
 
 ; Action Functions
