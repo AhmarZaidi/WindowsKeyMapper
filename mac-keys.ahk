@@ -16,7 +16,7 @@ if not (A_IsAdmin or RegExMatch(DllCall("GetCommandLine", "str"), "i)/restart"))
 }
 
 ; ==============================================================================
-; KepMapper - Lightweight & Battery-Efficient Key Mapping Utility
+; KeyMapper - Lightweight & Battery-Efficient Key Mapping Utility
 ; Designed by Antigravity AI
 ; ==============================================================================
 
@@ -420,7 +420,7 @@ DoBrowserTabRight(*) {
 ; ==============================================================================
 
 SetupTrayMenu() {
-    A_IconTip := "KepMapper - Active"
+    A_IconTip := "KeyMapper - Active"
     Tray := A_TrayMenu
     Tray.Delete()
     Tray.Add("Configure Settings", (*) => ShowGui())
@@ -435,7 +435,7 @@ ToggleMaster() {
     global SettingsFile, Enabled
     newVal := Enabled ? 0 : 1
     IniWrite(newVal, SettingsFile, "General", "Enabled")
-    TrayTip("KepMapper", newVal ? "Keyboard remappings enabled" : "Keyboard remappings disabled", 1)
+    TrayTip("KeyMapper", newVal ? "Keyboard remappings enabled" : "Keyboard remappings disabled", 1)
     Sleep(500)
     Reload()
 }
@@ -465,7 +465,7 @@ CreateGui() {
     global ChkStartup, SearchEdit, ShortcutLV
     global Enabled, CapsLockToTab, HighPriority, LineModifier, WordModifier, TabLeft, TabRight
 
-    MyGui := Gui("-MinimizeBox -MaximizeBox", "KepMapper Settings Panel")
+    MyGui := Gui("-MinimizeBox -MaximizeBox", "KeyMapper Settings Panel")
     MyGui.BackColor := ThemeBg
     MyGui.SetFont("s10 c" . ThemeFg, "Segoe UI")
     
@@ -551,7 +551,7 @@ CreateGui() {
     ; --- TAB 4: About ---
     TabCtrl.UseTab(4)
     MyGui.SetFont("Bold s14 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"))
-    MyGui.Add("Text", "x20 y60", "KepMapper Utility")
+    MyGui.Add("Text", "x20 y60", "KeyMapper Utility")
     MyGui.SetFont("norm s10 c" . ThemeFg)
     MyGui.Add("Text", "x20 y95 w510", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
     MyGui.Add("Text", "x20 y130 w510", "Utility Features:")
@@ -741,7 +741,7 @@ SetGuiValues() {
     SetToggleState(ChkBrowserTabLeft, IniRead(SettingsFile, "Hotkeys", "BrowserTabLeft", "1") == "1")
     SetToggleState(ChkBrowserTabRight, IniRead(SettingsFile, "Hotkeys", "BrowserTabRight", "1") == "1")
     
-    SetToggleState(ChkStartup, FileExist(A_Startup "\KepMapper.lnk") ? 1 : 0)
+    SetToggleState(ChkStartup, FileExist(A_Startup "\KeyMapper.lnk") ? 1 : 0)
 }
 
 OnSaveClick(*) {
@@ -810,13 +810,13 @@ OnSaveClick(*) {
     SetStartup(GetToggleValue(ChkStartup))
     
     MyGui.Hide()
-    TrayTip("KepMapper", "Settings saved successfully! Restarting engine...", 1)
+    TrayTip("KeyMapper", "Settings saved successfully! Restarting engine...", 1)
     Sleep(600)
     Reload()
 }
 
 SetStartup(enable) {
-    StartupLnk := A_Startup "\KepMapper.lnk"
+    StartupLnk := A_Startup "\KeyMapper.lnk"
     if (enable) {
         try {
             FileCreateShortcut(A_ScriptFullPath, StartupLnk, A_ScriptDir)

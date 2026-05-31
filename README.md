@@ -1,17 +1,11 @@
-# KepMapper
+# KeyMapper
 
 A lightweight, battery-efficient Windows key remapping utility with a modern Windows 11 system-themed interface (Light/Dark mode) and interactive toggle switches. Built entirely on **AutoHotkey v2**.
 
----
-
-### 📸 Screenshot Placeholder
-
 <!-- Insert Screenshot Here -->
-![KepMapper Settings Panel Mockup](https://raw.githubusercontent.com/AhmarZaidi/keymapper/main/screenshot_placeholder.png) 
+<img width="800" height="800" alt="image" src="https://github.com/user-attachments/assets/9c268933-a251-4f83-9b73-30c2c98d9478" />
 
----
-
-### 🚀 Key Features
+### Features
 
 * **Hardware Fix (CapsLock -> Tab):** Remaps CapsLock directly to Tab with Shift-modifier inheritance (e.g., `Shift + CapsLock` sends `Shift + Tab` for reverse indentation). Works inside elevated Administrator windows like Windows Terminal.
 * **Typing Customizations:**
@@ -27,11 +21,11 @@ A lightweight, battery-efficient Windows key remapping utility with a modern Win
 
 ---
 
-### 🛠️ Setup Instructions
+### Setup
 
-1. **Install AutoHotkey v2:** Download and install the latest stable version of **[AutoHotkey v2](https://www.autohotkey.com/)** on your Windows laptop.
-2. **Download KepMapper:** Place `mac-keys.ahk` and `settings.ini` in the same directory.
+1. **Install AutoHotkey v2:** Download and install the latest stable version of **[AutoHotkey v2](https://www.autohotkey.com/)**.
+2. **Download KeyMapper:** Place `mac-keys.ahk` and `settings.ini` in the same directory.
 3. **Run the Script:** Double-click `mac-keys.ahk`. 
-   * *Note: KepMapper automatically requests UAC Administrator elevation on launch to ensure keyboard hooks function correctly inside elevated programs like Windows Terminal.*
+   * *Note: KeyMapper automatically requests UAC Administrator elevation on launch to ensure keyboard hooks function correctly inside elevated programs like Windows Terminal.*
 4. **Configure:** Right-click the green tray icon and select **Configure Settings** or double-click it to customize modifiers and toggle specific hotkeys.
-5. **Set Startup (Optional):** Check the **Windows Auto-Startup** toggle under the *About* tab in the settings panel to run KepMapper automatically when logging in.
+5. **Set Startup (Optional):** Check the **Windows Auto-Startup** toggle under the *About* tab in the settings panel to run KeyMapper automatically when logging in.
