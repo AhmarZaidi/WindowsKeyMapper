@@ -46,8 +46,8 @@ global ShortcutLV := ""
 global Enabled := 1
 global CapsLockToTab := 1
 global HighPriority := 1
-global LineModifier := "Ctrl"
-global WordModifier := "Alt"
+global LineModifier := "Alt"
+global WordModifier := "Ctrl"
 global TabLeft := "^+["
 global TabRight := "^+]"
 global BrowserBackKey := "^["
@@ -80,8 +80,8 @@ LoadSettings() {
         IniWrite("1", SettingsFile, "General", "Enabled")
         IniWrite("1", SettingsFile, "General", "CapsLockToTab")
         IniWrite("1", SettingsFile, "General", "HighPriority")
-        IniWrite("Ctrl", SettingsFile, "Modifiers", "LineModifier")
-        IniWrite("Alt", SettingsFile, "Modifiers", "WordModifier")
+        IniWrite("Alt", SettingsFile, "Modifiers", "LineModifier")
+        IniWrite("Ctrl", SettingsFile, "Modifiers", "WordModifier")
         IniWrite("^+[", SettingsFile, "TabSwitching", "TabLeft")
         IniWrite("^+]", SettingsFile, "TabSwitching", "TabRight")
         
@@ -147,16 +147,16 @@ RegisterAllHotkeys() {
         TryRegister(prefix . lineSym . "Left", DoMoveToStartOfLine)
     }
     if (IniRead(SettingsFile, "Hotkeys", "MoveToTop", "1") == "1") {
-        TryRegister(prefix . lineSym . "Up", DoMoveToTop)
+        TryRegister(prefix . "^Up", DoMoveToTop)
     }
     if (IniRead(SettingsFile, "Hotkeys", "MoveToBottom", "1") == "1") {
-        TryRegister(prefix . lineSym . "Down", DoMoveToBottom)
+        TryRegister(prefix . "^Down", DoMoveToBottom)
     }
     if (IniRead(SettingsFile, "Hotkeys", "SelectToTop", "1") == "1") {
-        TryRegister(prefix . lineSym . "+Up", DoSelectToTop)
+        TryRegister(prefix . "^+Up", DoSelectToTop)
     }
     if (IniRead(SettingsFile, "Hotkeys", "SelectToBottom", "1") == "1") {
-        TryRegister(prefix . lineSym . "+Down", DoSelectToBottom)
+        TryRegister(prefix . "^+Down", DoSelectToBottom)
     }
     
     ; 3. Word-Level Actions
@@ -359,7 +359,7 @@ CreateGui() {
     MyGui.Add("Text", "x315 y180 c888888", "(Mac Cmd-like line tasks)")
     
     MyGui.Add("Text", "x40 y220", "Word-level modifier:")
-    DDLWordModifier := MyGui.Add("DropDownList", "x200 y215 w100", ["Alt", "Ctrl", "Win"])
+    DDLWordModifier := MyGui.Add("DropDownList", "x200 y215 w100", ["Ctrl", "Alt", "Win"])
     MyGui.Add("Text", "x315 y220 c888888", "(Mac Option-like word tasks)")
     
     MyGui.Add("GroupBox", "w510 h150 cDCDCDC x20 y275", "Browser Tab Navigation Shortcuts")
@@ -381,20 +381,20 @@ CreateGui() {
     
     MyGui.SetFont("Bold s9.5")
     MyGui.Add("Text", "x40 y75 cFFFFFF", "Line-Level Operations")
-    MyGui.SetFont("Normal s10")
+    MyGui.SetFont("norm s10")
     ChkDeleteLine := MyGui.Add("Checkbox", "x40 y105 w220", "Delete whole line (Mod+BS)")
     ChkSelectToEndOfLine := MyGui.Add("Checkbox", "x40 y135 w220", "Select to end (Mod+Sh+Rt)")
     ChkSelectToStartOfLine := MyGui.Add("Checkbox", "x40 y165 w220", "Select to start (Mod+Sh+Lf)")
     ChkMoveToEndOfLine := MyGui.Add("Checkbox", "x40 y195 w220", "Move to end (Mod+Rt)")
     ChkMoveToStartOfLine := MyGui.Add("Checkbox", "x40 y225 w220", "Move to start (Mod+Lf)")
-    ChkMoveToTop := MyGui.Add("Checkbox", "x40 y255 w220", "Move to top (Mod+Up)")
-    ChkMoveToBottom := MyGui.Add("Checkbox", "x40 y285 w220", "Move to bottom (Mod+Dn)")
-    ChkSelectToTop := MyGui.Add("Checkbox", "x40 y315 w220", "Select to top (Mod+Sh+Up)")
-    ChkSelectToBottom := MyGui.Add("Checkbox", "x40 y345 w220", "Select to bottom (Mod+Sh+Dn)")
+    ChkMoveToTop := MyGui.Add("Checkbox", "x40 y255 w220", "Move to top (Ctrl+Up)")
+    ChkMoveToBottom := MyGui.Add("Checkbox", "x40 y285 w220", "Move to bottom (Ctrl+Dn)")
+    ChkSelectToTop := MyGui.Add("Checkbox", "x40 y315 w220", "Select to top (Ctrl+Sh+Up)")
+    ChkSelectToBottom := MyGui.Add("Checkbox", "x40 y345 w220", "Select to bottom (Ctrl+Sh+Dn)")
 
     MyGui.SetFont("Bold s9.5")
     MyGui.Add("Text", "x280 y75 cFFFFFF", "Word-Level & Navigation")
-    MyGui.SetFont("Normal s10")
+    MyGui.SetFont("norm s10")
     ChkDeleteWordLeft := MyGui.Add("Checkbox", "x280 y105 w220", "Delete word left (Mod+BS)")
     ChkSelectWordRight := MyGui.Add("Checkbox", "x280 y135 w220", "Select word right (Mod+Sh+Rt)")
     ChkSelectWordLeft := MyGui.Add("Checkbox", "x280 y165 w220", "Select word left (Mod+Sh+Lf)")
@@ -403,7 +403,7 @@ CreateGui() {
     
     MyGui.SetFont("Bold s9.5")
     MyGui.Add("Text", "x280 y255 cFFFFFF", "Browser Navigation")
-    MyGui.SetFont("Normal s10")
+    MyGui.SetFont("norm s10")
     ChkBrowserBack := MyGui.Add("Checkbox", "x280 y285 w220", "Back history (Ctrl+[)")
     ChkBrowserForward := MyGui.Add("Checkbox", "x280 y315 w220", "Forward history (Ctrl+])")
     ChkBrowserTabLeft := MyGui.Add("Checkbox", "x280 y345 w220", "Tab switch left")
@@ -412,7 +412,7 @@ CreateGui() {
     ; --- TAB 3: Conflict Reference ---
     TabCtrl.UseTab(3)
     MyGui.Add("Text", "x20 y55", "Search standard Windows & Application hotkeys to avoid overlaps:")
-    SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 cFFFFFF Background242428 +Flat")
+    SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 cFFFFFF Background242428 -E0x200")
     SearchEdit.OnEvent("Change", OnSearchEditChange)
     
     ShortcutLV := MyGui.Add("ListView", "x20 y115 w510 h310 cFFFFFF Background1A1A1E Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
@@ -427,7 +427,7 @@ CreateGui() {
     TabCtrl.UseTab(4)
     MyGui.SetFont("Bold s14 c00FF88")
     MyGui.Add("Text", "x20 y60", "KepMapper Utility")
-    MyGui.SetFont("Normal s10 cDCDCDC")
+    MyGui.SetFont("norm s10 cDCDCDC")
     MyGui.Add("Text", "x20 y95 w510", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
     MyGui.Add("Text", "x20 y130 w510", "Utility Features:")
     MyGui.Add("Text", "x40 y155 w480", "• CapsLock remapped to Tab with Shift/Ctrl modifier inheritance.")
@@ -439,7 +439,7 @@ CreateGui() {
     MyGui.Add("Text", "x20 y295 w510 c888888", "Status: Running (Uses 0% CPU when not processing keystrokes)")
     ChkStartup := MyGui.Add("Checkbox", "x20 y325 w480", "Launch KepMapper automatically when logging in to Windows")
     
-    MyGui.SetFont("Normal s10")
+    MyGui.SetFont("norm s10")
     
     ; --- Bottom Controls ---
     TabCtrl.UseTab()
@@ -621,7 +621,7 @@ OnSaveClick(*) {
     ; Check if line and word modifiers are the same
     if (DDLLineModifier.Text == DDLWordModifier.Text) {
         warningMsg := "You have selected the same modifier (" DDLLineModifier.Text ") for both Line-Level and Word-Level shortcuts. This could lead to serious conflicts.`n`nAre you sure you want to save this configuration?"
-        if (MsgBox(warningMsg, "Potential Overlap Warning", "YesNo IconExclamation") == "No") {
+        if (MsgBox(warningMsg, "Potential Overlap Warning", "YesNo Icon!") == "No") {
             return
         }
     }
