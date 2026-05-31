@@ -72,6 +72,14 @@ global ChkExclCapsLock := ""
 global ChkExclTyping := ""
 global ChkExclBrowser := ""
 
+; Global GUI Layout Options
+global GuiWidth := 850
+global GuiHeight := 550
+global GuiPadding := 20
+global EditWidth := ""
+global EditHeight := ""
+global EditPadding := ""
+
 ; Global App Scanning Data
 global InstalledApps := []
 global ExclusionIL := ""
@@ -114,11 +122,12 @@ if (Enabled) {
     HotIf()
 }
 
-; Check if we need to show the GUI on startup (e.g., after reload saving)
+; Open the settings menu GUI by default on launch so the user knows KeyMapper is active!
+startTab := 1
 if (A_Args.Length > 0 and A_Args[1] == "/showgui") {
-    startTab := (A_Args.Length > 1) ? A_Args[2] : 1
-    ShowGui(startTab)
+    startTab := (A_Args.Length > 1) ? Integer(A_Args[2]) : 1
 }
+ShowGui(startTab)
 
 ; Return from auto-execute section
 return
@@ -131,6 +140,7 @@ LoadSettings() {
     global SettingsFile, Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme
     global LineModifier, WordModifier, TabLeft, TabRight, BrowserBackKey, BrowserForwardKey
     global ExclusionAppsList
+    global GuiWidth, GuiHeight, GuiPadding
     
     ; Create settings.ini with default values if it doesn't exist
     if !FileExist(SettingsFile) {
@@ -139,7 +149,11 @@ LoadSettings() {
         IniWrite("1", SettingsFile, "General", "HighPriority")
         IniWrite("1", SettingsFile, "General", "RemapWinK")
         IniWrite("System", SettingsFile, "General", "Theme")
+        IniWrite("850", SettingsFile, "General", "GuiWidth")
+        IniWrite("550", SettingsFile, "General", "GuiHeight")
+        IniWrite("20", SettingsFile, "General", "GuiPadding")
         
+        ; Modifiers
         IniWrite("Alt", SettingsFile, "Modifiers", "LineModifier")
         IniWrite("Ctrl", SettingsFile, "Modifiers", "WordModifier")
         IniWrite("^[", SettingsFile, "TabSwitching", "TabLeft")
@@ -173,6 +187,9 @@ LoadSettings() {
     HighPriority := IniRead(SettingsFile, "General", "HighPriority", "1") == "1" ? 1 : 0
     RemapWinK := IniRead(SettingsFile, "General", "RemapWinK", "1") == "1" ? 1 : 0
     AppTheme := IniRead(SettingsFile, "General", "Theme", "System")
+    GuiWidth := Integer(IniRead(SettingsFile, "General", "GuiWidth", "850"))
+    GuiHeight := Integer(IniRead(SettingsFile, "General", "GuiHeight", "550"))
+    GuiPadding := Integer(IniRead(SettingsFile, "General", "GuiPadding", "20"))
     
     LineModifier := IniRead(SettingsFile, "Modifiers", "LineModifier", "Alt")
     WordModifier := IniRead(SettingsFile, "Modifiers", "WordModifier", "Ctrl")
@@ -579,6 +596,8 @@ CreateGui(startTab := 1) {
     global ExclusionLV, SearchExclusionEdit, ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
     global Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme, LineModifier, WordModifier, TabLeft, TabRight
     global ExclusionIL
+    global GuiWidth, GuiHeight, GuiPadding
+    global EditWidth, EditHeight, EditPadding
 
     MyGui := Gui("-MinimizeBox -MaximizeBox", "KeyMapper Settings Panel")
     MyGui.BackColor := ThemeBg
@@ -587,95 +606,111 @@ CreateGui(startTab := 1) {
     ; Scan installed apps and build the dynamic list and ImageList once on GUI creation!
     ScanAndBuildAppList()
     
-    ; Expanded dimensions to provide standard Windows 11 rounded layouts breathing room
-    TabCtrl := MyGui.Add("Tab3", "x20 y15 w740 h480 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "App Exclusions", "Conflict Reference", "About"])
+    ; Layout measurements computed dynamically based on Width, Height, and Padding settings
+    TabCtrlWidth := GuiWidth - (GuiPadding * 2)
+    TabCtrlHeight := GuiHeight - 70
+    GBWidth := TabCtrlWidth - (GuiPadding * 2)
+    GBLeft := GuiPadding * 2
+    
+    ; Spaced inner coordinates
+    InnerLeft1 := GBLeft + GuiPadding
+    InnerLeft2 := GBLeft + (GBWidth / 2) + 15
+    DescLeft := InnerLeft1 + 225
+    DescWidth := GBWidth - 245
+    
+    TabCtrl := MyGui.Add("Tab3", "x" . GuiPadding . " y15 w" . TabCtrlWidth . " h" . TabCtrlHeight . " c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "App Exclusions", "Conflict Reference", "About"])
     
     ; --- TAB 1: Core Mappings ---
     TabCtrl.UseTab(1)
     
-    MyGui.Add("GroupBox", "w700 h165 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
-    ChkCapsLockToTab := AddToggleSwitch(MyGui, 40, 75, CapsLockToTab, "Remap CapsLock to Tab")
-    ChkHighPriority := AddToggleSwitch(MyGui, 40, 105, HighPriority, "High Priority Hook Mode")
-    ChkRemapWinK := AddToggleSwitch(MyGui, 40, 135, RemapWinK, "Remap Win+K to Bluetooth")
+    MyGui.Add("GroupBox", "w" . GBWidth . " h165 c" . GroupBorderColor . " x" . GBLeft . " y50", "General Hardware & Engine Options")
+    ChkCapsLockToTab := AddToggleSwitch(MyGui, InnerLeft1, 75, CapsLockToTab, "Remap CapsLock to Tab")
+    MyGui.Add("Text", "x" . DescLeft . " y77 w" . DescWidth . " c888888", "(Remaps physical CapsLock key to native Tab; modifier keys are fully inherited)")
     
-    MyGui.Add("GroupBox", "w700 h110 c" . GroupBorderColor . " x20 y225", "Typing Modifier Assignments")
-    MyGui.Add("Text", "x40 y250 c" . ThemeFg, "Line-level modifier:")
-    DDLLineModifier := MyGui.Add("DropDownList", "x200 y245 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y250 c888888", "(Mac Cmd-like line tasks)")
+    ChkHighPriority := AddToggleSwitch(MyGui, InnerLeft1, 105, HighPriority, "High Priority Hook Mode")
+    MyGui.Add("Text", "x" . DescLeft . " y107 w" . DescWidth . " c888888", "(Enforces physical keyboard hook priority to run mappings before standard OS apps)")
     
-    MyGui.Add("Text", "x40 y290 c" . ThemeFg, "Word-level modifier:")
-    DDLWordModifier := MyGui.Add("DropDownList", "x200 y285 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y290 c888888", "(Mac Option-like word tasks)")
+    ChkRemapWinK := AddToggleSwitch(MyGui, InnerLeft1, 135, RemapWinK, "Remap Win+K to Bluetooth")
+    MyGui.Add("Text", "x" . DescLeft . " y137 w" . DescWidth . " c888888", "(Redirects the Win+K Cast hotkey to natively launch the Action Center Bluetooth flyout)")
     
-    MyGui.Add("GroupBox", "w700 h110 c" . GroupBorderColor . " x20 y345", "Browser Navigation Shortcuts")
-    MyGui.Add("Text", "x40 y370 c" . ThemeFg, "Tab Navigation:")
-    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y365 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y370 c" . ThemeFg, "+")
-    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y365 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("GroupBox", "w" . GBWidth . " h110 c" . GroupBorderColor . " x" . GBLeft . " y225", "Typing Modifier Assignments")
+    MyGui.Add("Text", "x" . InnerLeft1 . " y250 c" . ThemeFg, "Line-level modifier:")
+    DDLLineModifier := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 160) . " y245 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x" . (InnerLeft1 + 275) . " y250 c888888", "(Mac Cmd-like line tasks)")
     
-    MyGui.Add("Text", "x40 y410 c" . ThemeFg, "History Navigation:")
-    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y405 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y410 c" . ThemeFg, "+")
-    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y405 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("Text", "x" . InnerLeft1 . " y290 c" . ThemeFg, "Word-level modifier:")
+    DDLWordModifier := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 160) . " y285 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x" . (InnerLeft1 + 275) . " y290 c888888", "(Mac Option-like word tasks)")
+    
+    MyGui.Add("GroupBox", "w" . GBWidth . " h110 c" . GroupBorderColor . " x" . GBLeft . " y345", "Browser Navigation Shortcuts")
+    MyGui.Add("Text", "x" . InnerLeft1 . " y370 c" . ThemeFg, "Tab Navigation:")
+    DDLTabLeftMod := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 120) . " y365 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x" . (InnerLeft1 + 230) . " y370 c" . ThemeFg, "+")
+    DDLTabLeftKey := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 250) . " y365 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    
+    MyGui.Add("Text", "x" . InnerLeft1 . " y410 c" . ThemeFg, "History Navigation:")
+    DDLTabRightMod := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 120) . " y405 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x" . (InnerLeft1 + 230) . " y410 c" . ThemeFg, "+")
+    DDLTabRightKey := MyGui.Add("DropDownList", "x" . (InnerLeft1 + 250) . " y405 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
 
     ; --- TAB 2: Hotkeys Checklist ---
     TabCtrl.UseTab(2)
-    MyGui.Add("GroupBox", "w700 h380 c" . GroupBorderColor . " x20 y50", "Toggle Specific Actions & Shortcuts")
+    MyGui.Add("GroupBox", "w" . GBWidth . " h380 c" . GroupBorderColor . " x" . GBLeft . " y50", "Toggle Specific Actions & Shortcuts")
     
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x40 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Line-Level Operations")
+    MyGui.Add("Text", "x" . InnerLeft1 . " y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Line-Level Operations")
     MyGui.SetFont("norm s10")
-    ChkDeleteLine := AddToggleSwitch(MyGui, 40, 105, 1, "Delete whole line")
-    ChkSelectToEndOfLine := AddToggleSwitch(MyGui, 40, 135, 1, "Select to end")
-    ChkSelectToStartOfLine := AddToggleSwitch(MyGui, 40, 165, 1, "Select to start")
-    ChkMoveToEndOfLine := AddToggleSwitch(MyGui, 40, 195, 1, "Move to end")
-    ChkMoveToStartOfLine := AddToggleSwitch(MyGui, 40, 225, 1, "Move to start")
-    ChkMoveToTop := AddToggleSwitch(MyGui, 40, 255, 1, "Move to top")
-    ChkMoveToBottom := AddToggleSwitch(MyGui, 40, 285, 1, "Move to bottom")
-    ChkSelectToTop := AddToggleSwitch(MyGui, 40, 315, 1, "Select to top")
-    ChkSelectToBottom := AddToggleSwitch(MyGui, 40, 345, 1, "Select to bottom")
+    ChkDeleteLine := AddToggleSwitch(MyGui, InnerLeft1, 105, 1, "Delete whole line")
+    ChkSelectToEndOfLine := AddToggleSwitch(MyGui, InnerLeft1, 135, 1, "Select to end")
+    ChkSelectToStartOfLine := AddToggleSwitch(MyGui, InnerLeft1, 165, 1, "Select to start")
+    ChkMoveToEndOfLine := AddToggleSwitch(MyGui, InnerLeft1, 195, 1, "Move to end")
+    ChkMoveToStartOfLine := AddToggleSwitch(MyGui, InnerLeft1, 225, 1, "Move to start")
+    ChkMoveToTop := AddToggleSwitch(MyGui, InnerLeft1, 255, 1, "Move to top")
+    ChkMoveToBottom := AddToggleSwitch(MyGui, InnerLeft1, 285, 1, "Move to bottom")
+    ChkSelectToTop := AddToggleSwitch(MyGui, InnerLeft1, 315, 1, "Select to top")
+    ChkSelectToBottom := AddToggleSwitch(MyGui, InnerLeft1, 345, 1, "Select to bottom")
 
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x380 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Word-Level & Navigation")
+    MyGui.Add("Text", "x" . InnerLeft2 . " y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Word-Level & Navigation")
     MyGui.SetFont("norm s10")
-    ChkDeleteWordLeft := AddToggleSwitch(MyGui, 380, 105, 1, "Delete word left")
-    ChkSelectWordRight := AddToggleSwitch(MyGui, 380, 135, 1, "Select word right")
-    ChkSelectWordLeft := AddToggleSwitch(MyGui, 380, 165, 1, "Select word left")
-    ChkMoveWordRight := AddToggleSwitch(MyGui, 380, 195, 1, "Move word right")
-    ChkMoveWordLeft := AddToggleSwitch(MyGui, 380, 225, 1, "Move word left")
+    ChkDeleteWordLeft := AddToggleSwitch(MyGui, InnerLeft2, 105, 1, "Delete word left")
+    ChkSelectWordRight := AddToggleSwitch(MyGui, InnerLeft2, 135, 1, "Select word right")
+    ChkSelectWordLeft := AddToggleSwitch(MyGui, InnerLeft2, 165, 1, "Select word left")
+    ChkMoveWordRight := AddToggleSwitch(MyGui, InnerLeft2, 195, 1, "Move word right")
+    ChkMoveWordLeft := AddToggleSwitch(MyGui, InnerLeft2, 225, 1, "Move word left")
     
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x380 y255 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Browser Navigation")
+    MyGui.Add("Text", "x" . InnerLeft2 . " y255 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Browser Navigation")
     MyGui.SetFont("norm s10")
-    ChkBrowserBack := AddToggleSwitch(MyGui, 380, 285, 1, "Back history")
-    ChkBrowserForward := AddToggleSwitch(MyGui, 380, 315, 1, "Forward history")
-    ChkBrowserTabLeft := AddToggleSwitch(MyGui, 380, 345, 1, "Tab switch left")
-    ChkBrowserTabRight := AddToggleSwitch(MyGui, 380, 375, 1, "Tab switch right")
+    ChkBrowserBack := AddToggleSwitch(MyGui, InnerLeft2, 285, 1, "Back history")
+    ChkBrowserForward := AddToggleSwitch(MyGui, InnerLeft2, 315, 1, "Forward history")
+    ChkBrowserTabLeft := AddToggleSwitch(MyGui, InnerLeft2, 345, 1, "Tab switch left")
+    ChkBrowserTabRight := AddToggleSwitch(MyGui, InnerLeft2, 375, 1, "Tab switch right")
 
     ; --- TAB 3: App Exclusions ---
     TabCtrl.UseTab(3)
-    MyGui.Add("GroupBox", "w700 h380 c" . GroupBorderColor . " x20 y50", "App-Specific Bypass Settings")
-    MyGui.Add("Text", "x40 y75 c" . ThemeFg, "Search app:")
-    SearchExclusionEdit := MyGui.Add("Edit", "x130 y72 w250 h24 " . EditBg . " -E0x200")
+    MyGui.Add("GroupBox", "w" . GBWidth . " h380 c" . GroupBorderColor . " x" . GBLeft . " y50", "App-Specific Bypass Settings")
+    MyGui.Add("Text", "x" . InnerLeft1 . " y75 c" . ThemeFg, "Search app:")
+    SearchExclusionEdit := MyGui.Add("Edit", "x" . (InnerLeft1 + 90) . " y72 w250 h24 " . EditBg . " -E0x200")
     SearchExclusionEdit.OnEvent("Change", OnSearchExclusionChange)
     
-    ExclusionLV := MyGui.Add("ListView", "x40 y105 w380 h260 c" . ThemeFg . " Background" . ThemeControlBg . " Grid -Multi", ["Application Name", "Executable"])
-    ExclusionLV.ModifyCol(1, 220)
-    ExclusionLV.ModifyCol(2, 130)
+    ExclusionLV := MyGui.Add("ListView", "x" . InnerLeft1 . " y105 w420 h260 c" . ThemeFg . " Background" . ThemeControlBg . " Grid -Multi", ["Application Name", "Executable"])
+    ExclusionLV.ModifyCol(1, 250)
+    ExclusionLV.ModifyCol(2, 150)
     ExclusionLV.SetImageList(ExclusionIL, 1)
     ExclusionLV.OnEvent("Click", OnExclusionLVClick)
     
-    AddBtn := MyGui.Add("Button", "x40 y375 w180 h30", "Add Custom App")
+    AddBtn := MyGui.Add("Button", "x" . InnerLeft1 . " y375 w200 h30 " . ToggleOffBg, "Add Custom App")
     AddBtn.OnEvent("Click", OnAddExclusionClick)
     
-    RemoveBtn := MyGui.Add("Button", "x240 y375 w180 h30", "Remove App")
+    RemoveBtn := MyGui.Add("Button", "x" . (InnerLeft1 + 220) . " y375 w200 h30 " . ToggleOffBg, "Remove App")
     RemoveBtn.OnEvent("Click", OnRemoveExclusionClick)
     
     ; Specific App Exclusion settings (displayed on selection)
-    MyGui.Add("GroupBox", "w260 h260 c" . GroupBorderColor . " x440 y105", "Selection Actions")
-    ChkExclCapsLock := AddToggleSwitch(MyGui, 450, 135, 0, "Bypass CapsLock")
-    ChkExclTyping := AddToggleSwitch(MyGui, 450, 195, 0, "Bypass Modifiers")
-    ChkExclBrowser := AddToggleSwitch(MyGui, 450, 255, 0, "Bypass Browser")
+    MyGui.Add("GroupBox", "w250 h260 c" . GroupBorderColor . " x500 y105", "Selection Actions")
+    ChkExclCapsLock := AddToggleSwitch(MyGui, 510, 135, 0, "Bypass CapsLock")
+    ChkExclTyping := AddToggleSwitch(MyGui, 510, 195, 0, "Bypass Modifiers")
+    ChkExclBrowser := AddToggleSwitch(MyGui, 510, 255, 0, "Bypass Browser")
     
     ; Bind events on toggles to save immediately in INI
     ChkExclCapsLock.OnEvent("Click", OnToggleExclusionClick)
@@ -686,14 +721,14 @@ CreateGui(startTab := 1) {
 
     ; --- TAB 4: Conflict Reference ---
     TabCtrl.UseTab(4)
-    MyGui.Add("Text", "x20 y55 c" . ThemeFg, "Search standard Windows & Application hotkeys to avoid overlaps:")
-    SearchEdit := MyGui.Add("Edit", "x20 y80 w700 h24 " . EditBg . " -E0x200")
+    MyGui.Add("Text", "x" . GBLeft . " y55 c" . ThemeFg, "Search standard Windows & Application hotkeys to avoid overlaps:")
+    SearchEdit := MyGui.Add("Edit", "x" . GBLeft . " y80 w" . GBWidth . " h24 " . EditBg . " -E0x200")
     SearchEdit.OnEvent("Change", OnSearchEditChange)
     
-    ShortcutLV := MyGui.Add("ListView", "x20 y115 w700 h310 c" . ThemeFg . " Background" . ThemeControlBg . " Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
+    ShortcutLV := MyGui.Add("ListView", "x" . GBLeft . " y115 w" . GBWidth . " h310 c" . ThemeFg . " Background" . ThemeControlBg . " Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
     ShortcutLV.ModifyCol(1, 150)
-    ShortcutLV.ModifyCol(2, 280)
-    ShortcutLV.ModifyCol(3, 150)
+    ShortcutLV.ModifyCol(2, 330)
+    ShortcutLV.ModifyCol(3, 170)
     ShortcutLV.ModifyCol(4, 100)
     
     PopulateConflictDatabase("")
@@ -701,40 +736,53 @@ CreateGui(startTab := 1) {
     ; --- TAB 5: About ---
     TabCtrl.UseTab(5)
     MyGui.SetFont("Bold s14 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"))
-    MyGui.Add("Text", "x20 y60", "KeyMapper Utility v1.1")
+    MyGui.Add("Text", "x" . GBLeft . " y60", "KeyMapper Utility v1.1")
     MyGui.SetFont("norm s10 c" . ThemeFg)
-    MyGui.Add("Text", "x20 y95 w700", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
-    MyGui.Add("Text", "x20 y130 w700", "Utility Features & System Enhancements:")
-    MyGui.Add("Text", "x40 y155 w660", "• CapsLock Hardware Remap: Remapped to Tab with Shift/Ctrl modifier inheritance.")
-    MyGui.Add("Text", "x40 y180 w660", "• Modifier Customization: Set custom modifier keys for advanced line-level & word-level shortcuts.")
-    MyGui.Add("Text", "x40 y205 w660", "• Dynamic App Exclusions: Live-scanned installed applications with high-quality system logo icons.")
-    MyGui.Add("Text", "x40 y230 w660", "• Win+K Bluetooth Remap: Redirect cast menu to open the modern Bluetooth flyout panel natively.")
-    MyGui.Add("Text", "x40 y255 w660", "• Conflict Reference: Interactive searchable database containing standard OS and browser hotkeys.")
-    MyGui.Add("Text", "x40 y280 w660", "• Premium Core Controls: Quick enabling/disabling, factory resets, and complete shutdown options.")
+    MyGui.Add("Text", "x" . GBLeft . " y95 w" . GBWidth, "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
+    MyGui.Add("Text", "x" . GBLeft . " y130 w" . GBWidth, "Utility Features & System Enhancements:")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y155 w" . (GBWidth - 20), "• CapsLock Hardware Remap: Remapped to Tab with Shift/Ctrl modifier inheritance.")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y180 w" . (GBWidth - 20), "• Modifier Customization: Set custom modifier keys for advanced line-level & word-level shortcuts.")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y205 w" . (GBWidth - 20), "• Dynamic App Exclusions: Live-scanned installed applications with high-quality system logo icons.")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y230 w" . (GBWidth - 20), "• Win+K Bluetooth Remap: Redirect cast menu to open the modern Bluetooth flyout panel natively.")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y255 w" . (GBWidth - 20), "• Conflict Reference: Interactive searchable database containing standard OS and browser hotkeys.")
+    MyGui.Add("Text", "x" . (GBLeft + 20) . " y280 w" . (GBWidth - 20), "• Premium Core Controls: Quick enabling/disabling, factory resets, and complete shutdown options.")
     
-    MyGui.Add("Text", "x20 y315 w700 c" . (IsSystemLightTheme() ? "555555" : "888888"), "Status: Running (Uses 0% CPU when not processing keystrokes)")
-    ChkStartup := AddToggleSwitch(MyGui, 20, 345, 0, "Windows Auto-Startup")
+    MyGui.Add("Text", "x" . GBLeft . " y312 w" . GBWidth . " c" . (IsSystemLightTheme() ? "555555" : "888888"), "Status: Running (Uses 0% CPU when not processing keystrokes)")
+    ChkStartup := AddToggleSwitch(MyGui, GBLeft, 340, 0, "Windows Auto-Startup")
     
-    MyGui.Add("Text", "x300 y349 c" . ThemeFg, "Interface Theme:")
-    DDLTheme := MyGui.Add("DropDownList", "x420 y345 w110", ["System", "Dark", "Light"])
+    MyGui.Add("Text", "x" . (GBLeft + 250) . " y344 c" . ThemeFg, "Interface Theme:")
+    DDLTheme := MyGui.Add("DropDownList", "x" . (GBLeft + 360) . " y340 w100", ["System", "Dark", "Light"])
     DDLTheme.OnEvent("Change", OnThemeChange)
+    
+    ; GUI Layout Customizer Controls (Sizing Options)
+    MyGui.Add("Text", "x" . GBLeft . " y384 c" . ThemeFg, "GUI Width:")
+    EditWidth := MyGui.Add("Edit", "x" . (GBLeft + 80) . " y380 w60 h24 " . EditBg . " -E0x200")
+    MyGui.Add("UpDown", "Range500-1200", GuiWidth)
+    
+    MyGui.Add("Text", "x" . (GBLeft + 165) . " y384 c" . ThemeFg, "GUI Height:")
+    EditHeight := MyGui.Add("Edit", "x" . (GBLeft + 250) . " y380 w60 h24 " . EditBg . " -E0x200")
+    MyGui.Add("UpDown", "Range400-900", GuiHeight)
+    
+    MyGui.Add("Text", "x" . (GBLeft + 335) . " y384 c" . ThemeFg, "GUI Padding:")
+    EditPadding := MyGui.Add("Edit", "x" . (GBLeft + 430) . " y380 w50 h24 " . EditBg . " -E0x200")
+    MyGui.Add("UpDown", "Range5-50", GuiPadding)
     
     MyGui.SetFont("norm s10")
     
     ; --- Bottom Controls ---
     TabCtrl.UseTab()
-    ChkEnabled := AddToggleSwitch(MyGui, 20, 508, Enabled, "Enable Typing Remaps")
+    ChkEnabled := AddToggleSwitch(MyGui, GuiPadding, (GuiHeight - 42), Enabled, "Enable Typing Remaps")
     
-    QuitBtn := MyGui.Add("Button", "x230 y502 w120 h32", "Quit KeyMapper")
+    QuitBtn := MyGui.Add("Button", "x" . (GuiWidth - GuiPadding - 530) . " y" . (GuiHeight - 48) . " w120 h32 " . ToggleOffBg, "Quit KeyMapper")
     QuitBtn.OnEvent("Click", OnQuitClick)
     
-    ResetBtn := MyGui.Add("Button", "x360 y502 w140 h32", "Reset to Defaults")
+    ResetBtn := MyGui.Add("Button", "x" . (GuiWidth - GuiPadding - 400) . " y" . (GuiHeight - 48) . " w140 h32 " . ToggleOffBg, "Reset to Defaults")
     ResetBtn.OnEvent("Click", OnResetDefaults)
     
-    SaveBtn := MyGui.Add("Button", "x510 y502 w120 h32 Default", "Save & Apply")
+    SaveBtn := MyGui.Add("Button", "x" . (GuiWidth - GuiPadding - 250) . " y" . (GuiHeight - 48) . " w120 h32 Default " . ToggleOnBg, "Save & Apply")
     SaveBtn.OnEvent("Click", OnSaveClick)
     
-    CloseBtn := MyGui.Add("Button", "x640 y502 w120 h32", "Close to Tray")
+    CloseBtn := MyGui.Add("Button", "x" . (GuiWidth - GuiPadding - 120) . " y" . (GuiHeight - 48) . " w120 h32 " . ToggleOffBg, "Close to Tray")
     CloseBtn.OnEvent("Click", (*) => MyGui.Hide())
     
     SetGuiValues()
@@ -743,7 +791,7 @@ CreateGui(startTab := 1) {
     
     ; Select initial start tab index
     TabCtrl.Value := startTab
-    MyGui.Show("w780 h550")
+    MyGui.Show("w" . GuiWidth . " h" . GuiHeight)
 }
 
 GetIndexForModifier(name) {
@@ -982,6 +1030,11 @@ OnSaveClick(*) {
     IniWrite(GetToggleValue(ChkBrowserTabLeft), SettingsFile, "Hotkeys", "BrowserTabLeft")
     IniWrite(GetToggleValue(ChkBrowserTabRight), SettingsFile, "Hotkeys", "BrowserTabRight")
     
+    ; Save GUI Layout settings
+    IniWrite(EditWidth.Value, SettingsFile, "General", "GuiWidth")
+    IniWrite(EditHeight.Value, SettingsFile, "General", "GuiHeight")
+    IniWrite(EditPadding.Value, SettingsFile, "General", "GuiPadding")
+    
     ; Startup Setting
     SetStartup(GetToggleValue(ChkStartup))
     
@@ -1016,8 +1069,9 @@ SetStartup(enable) {
 }
 
 OnThemeChange(Ctrl, *) {
-    global SettingsFile, MyGui
+    global SettingsFile, MyGui, AppTheme
     IniWrite(Ctrl.Text, SettingsFile, "General", "Theme")
+    AppTheme := Ctrl.Text
     
     ; Re-open to the "About" tab (Tab 5) instantly so they stay on the same tab
     activeTab := 5
