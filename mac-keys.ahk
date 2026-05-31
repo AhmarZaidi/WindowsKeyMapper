@@ -4,10 +4,16 @@
 ; Self-elevate to Administrator to allow remapping in elevated Windows Terminals, Cmd, and Task Manager
 if not (A_IsAdmin or RegExMatch(DllCall("GetCommandLine", "str"), "i)/restart")) {
     try {
+        ; Forward arguments if any
+        argsStr := ""
+        for arg in A_Args {
+            argsStr .= ' "' arg '"'
+        }
+        
         if A_IsCompiled {
-            Run('*RunAs "' A_ScriptFullPath '" /restart')
+            Run('*RunAs "' A_ScriptFullPath '" /restart' . argsStr)
         } else {
-            Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '"')
+            Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '"' . argsStr)
         }
         ExitApp()
     } catch {
@@ -27,6 +33,8 @@ global SettingsFile := A_ScriptDir "\settings.ini"
 global MyGui := ""
 global ChkCapsLockToTab := ""
 global ChkHighPriority := ""
+global ChkRemapWinK := ""
+global DDLTheme := ""
 global ChkEnabled := ""
 global DDLLineModifier := ""
 global DDLWordModifier := ""
@@ -56,16 +64,26 @@ global ChkStartup := ""
 global SearchEdit := ""
 global ShortcutLV := ""
 
+; Global App Exclusion GUI Controls
+global ExclusionLV := ""
+global SearchExclusionEdit := ""
+global ChkExclCapsLock := ""
+global ChkExclTyping := ""
+global ChkExclBrowser := ""
+
 ; Global configuration state variables
 global Enabled := 1
 global CapsLockToTab := 1
 global HighPriority := 1
+global RemapWinK := 1
+global AppTheme := "System"
 global LineModifier := "Alt"
 global WordModifier := "Ctrl"
 global TabLeft := "^["
 global TabRight := "^]"
 global BrowserBackKey := "!["
 global BrowserForwardKey := "!]"
+global ExclusionAppsList := []
 
 ; Global Theme Colors (dynamically populated based on Windows Personalizations)
 global ThemeBg := "121214"
@@ -84,8 +102,16 @@ SetupTrayMenu()
 if (Enabled) {
     RegisterAllHotkeys()
 } else if (CapsLockToTab) {
-    ; Keep CapsLock remapped even if master remapping is toggled off
+    ; Keep CapsLock remapped globally unless excluded for active application
+    HotIf(IsCapsLockEnabled)
     TryRegister("*CapsLock", DoCapsLockRemap)
+    HotIf()
+}
+
+; Check if we need to show the GUI on startup (e.g., after reload saving)
+if (A_Args.Length > 0 and A_Args[1] == "/showgui") {
+    startTab := (A_Args.Length > 1) ? A_Args[2] : 1
+    ShowGui(startTab)
 }
 
 ; Return from auto-execute section
@@ -96,20 +122,36 @@ return
 ; ==============================================================================
 
 LoadSettings() {
-    global SettingsFile, Enabled, CapsLockToTab, HighPriority
+    global SettingsFile, Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme
     global LineModifier, WordModifier, TabLeft, TabRight, BrowserBackKey, BrowserForwardKey
+    global ExclusionAppsList
     
     ; Create settings.ini with default values if it doesn't exist
     if !FileExist(SettingsFile) {
         IniWrite("1", SettingsFile, "General", "Enabled")
         IniWrite("1", SettingsFile, "General", "CapsLockToTab")
         IniWrite("1", SettingsFile, "General", "HighPriority")
+        IniWrite("1", SettingsFile, "General", "RemapWinK")
+        IniWrite("System", SettingsFile, "General", "Theme")
+        
         IniWrite("Alt", SettingsFile, "Modifiers", "LineModifier")
         IniWrite("Ctrl", SettingsFile, "Modifiers", "WordModifier")
         IniWrite("^[", SettingsFile, "TabSwitching", "TabLeft")
         IniWrite("^]", SettingsFile, "TabSwitching", "TabRight")
         IniWrite("![", SettingsFile, "TabSwitching", "BrowserBack")
         IniWrite("!]", SettingsFile, "TabSwitching", "BrowserForward")
+        
+        ; Exclusions default list
+        IniWrite("cmd.exe,powershell.exe,windowsterminal.exe", SettingsFile, "Exclusions", "Apps")
+        IniWrite("0", SettingsFile, "Exclusion_cmd.exe", "DisableCapsLock")
+        IniWrite("1", SettingsFile, "Exclusion_cmd.exe", "DisableTyping")
+        IniWrite("1", SettingsFile, "Exclusion_cmd.exe", "DisableBrowser")
+        IniWrite("0", SettingsFile, "Exclusion_powershell.exe", "DisableCapsLock")
+        IniWrite("1", SettingsFile, "Exclusion_powershell.exe", "DisableTyping")
+        IniWrite("1", SettingsFile, "Exclusion_powershell.exe", "DisableBrowser")
+        IniWrite("0", SettingsFile, "Exclusion_windowsterminal.exe", "DisableCapsLock")
+        IniWrite("1", SettingsFile, "Exclusion_windowsterminal.exe", "DisableTyping")
+        IniWrite("1", SettingsFile, "Exclusion_windowsterminal.exe", "DisableBrowser")
         
         ; Hotkeys
         for hk in ["DeleteLine", "SelectToEndOfLine", "SelectToStartOfLine", "MoveToEndOfLine", 
@@ -123,15 +165,19 @@ LoadSettings() {
     Enabled := IniRead(SettingsFile, "General", "Enabled", "1") == "1" ? 1 : 0
     CapsLockToTab := IniRead(SettingsFile, "General", "CapsLockToTab", "1") == "1" ? 1 : 0
     HighPriority := IniRead(SettingsFile, "General", "HighPriority", "1") == "1" ? 1 : 0
+    RemapWinK := IniRead(SettingsFile, "General", "RemapWinK", "1") == "1" ? 1 : 0
+    AppTheme := IniRead(SettingsFile, "General", "Theme", "System")
     
     LineModifier := IniRead(SettingsFile, "Modifiers", "LineModifier", "Alt")
     WordModifier := IniRead(SettingsFile, "Modifiers", "WordModifier", "Ctrl")
     
     TabLeft := IniRead(SettingsFile, "TabSwitching", "TabLeft", "^[")
     TabRight := IniRead(SettingsFile, "TabSwitching", "TabRight", "^]")
-    
     BrowserBackKey := IniRead(SettingsFile, "TabSwitching", "BrowserBack", "![")
     BrowserForwardKey := IniRead(SettingsFile, "TabSwitching", "BrowserForward", "!]")
+    
+    exclusionStr := IniRead(SettingsFile, "Exclusions", "Apps", "cmd.exe,powershell.exe,windowsterminal.exe")
+    ExclusionAppsList := StrSplit(exclusionStr, ",")
 }
 
 GetModifierSymbol(name) {
@@ -144,20 +190,27 @@ GetModifierSymbol(name) {
 }
 
 RegisterAllHotkeys() {
-    global SettingsFile, CapsLockToTab, HighPriority
+    global SettingsFile, CapsLockToTab, HighPriority, RemapWinK
     global LineModifier, WordModifier, TabLeft, TabRight, BrowserBackKey, BrowserForwardKey
     
     prefix := HighPriority ? "$" : ""
     lineSym := GetModifierSymbol(LineModifier)
     wordSym := GetModifierSymbol(WordModifier)
     
-    ; 1. CapsLock remapping (runs globally so Tab works in terminal too)
+    ; 1. CapsLock remapping
+    HotIf(IsCapsLockEnabled)
     if (CapsLockToTab) {
         TryRegister("*CapsLock", DoCapsLockRemap)
     }
+    HotIf()
     
-    ; Exclude command terminal windows from custom text editing shortcuts to prevent key conflicts
-    HotIf(IsNotTerminalActive)
+    ; Windows Default Shortcut Overrides (Remap Win+K to Bluetooth Settings)
+    if (RemapWinK) {
+        TryRegister("#k", DoBluetoothRemap)
+    }
+    
+    ; Exclude command terminals and specifically blocked apps from custom shortcuts
+    HotIf(IsTypingActive)
     
     ; 2. Line-Level Actions
     if (IniRead(SettingsFile, "Hotkeys", "DeleteLine", "1") == "1") {
@@ -180,8 +233,8 @@ RegisterAllHotkeys() {
         TryRegister(prefix . lineSym . "Left", DoMoveToStartOfLine)
     }
     
-    ; Restore standard terminal exclusion for remaining editing hotkeys
-    HotIf(IsNotTerminalActive)
+    ; Restore standard terminal/exclusion check for remaining editing hotkeys
+    HotIf(IsTypingActive)
     if (IniRead(SettingsFile, "Hotkeys", "MoveToTop", "1") == "1") {
         TryRegister(prefix . "^Up", DoMoveToTop)
     }
@@ -211,12 +264,10 @@ RegisterAllHotkeys() {
     if (IniRead(SettingsFile, "Hotkeys", "MoveWordLeft", "1") == "1") {
         TryRegister(prefix . wordSym . "Left", DoMoveWordLeft)
     }
-    
-    ; Reset HotIf exclusion for terminals
     HotIf()
     
     ; 4. Browser Specific Actions
-    HotIf(IsBrowserActive)
+    HotIf(IsBrowserShortcutActive)
     if (IniRead(SettingsFile, "Hotkeys", "BrowserTabLeft", "1") == "1" and TabLeft != "") {
         TryRegister(prefix . TabLeft, DoBrowserTabLeft)
     }
@@ -240,6 +291,7 @@ TryRegister(hkName, callback) {
     }
 }
 
+; Dynamic Action Restrictions
 IsBrowserActive(*) {
     return WinActive("ahk_exe chrome.exe") 
         or WinActive("ahk_exe firefox.exe") 
@@ -255,88 +307,61 @@ IsNotTerminalActive(*) {
         or WinActive("ahk_exe cmd.exe"))
 }
 
-IsCaretMovementActive(*) {
-    return IsNotTerminalActive() and not IsBrowserActive()
-}
-
-; ==============================================================================
-; SYSTEM THEME DETECTION & MODERN DYNAMIC TOGGLE SWITCH CONTROLS
-; ==============================================================================
-
-IsSystemLightTheme() {
+IsCapsLockEnabled(*) {
     try {
-        return RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme") == 1
+        activeProcess := WinGetProcessName("A")
+        if (activeProcess == "") {
+            return true
+        }
+        return IniRead(SettingsFile, "Exclusion_" . StrLower(activeProcess), "DisableCapsLock", "0") != "1"
     } catch {
-        return 0
+        return true
     }
 }
 
-LoadTheme() {
-    global ThemeBg, ThemeFg, ThemeControlBg, ToggleOnBg, ToggleOffBg, EditBg, GroupBorderColor
-    if IsSystemLightTheme() {
-        ThemeBg := "F3F3F3"
-        ThemeFg := "1A1A1A"
-        ThemeControlBg := "FFFFFF"
-        ToggleOnBg := "Background4CAF50 cWhite"
-        ToggleOffBg := "BackgroundD0D0D0 c555555"
-        EditBg := "BackgroundFFFFFF c000000"
-        GroupBorderColor := "808080"
-    } else {
-        ThemeBg := "121214"
-        ThemeFg := "DCDCDC"
-        ThemeControlBg := "1A1A1E"
-        ToggleOnBg := "Background00FF88 c121214"
-        ToggleOffBg := "Background2D2D30 cA0A0A0"
-        EditBg := "Background242428 cFFFFFF"
-        GroupBorderColor := "DCDCDC"
+IsTypingEnabled(*) {
+    try {
+        activeProcess := WinGetProcessName("A")
+        if (activeProcess == "") {
+            return true
+        }
+        return IniRead(SettingsFile, "Exclusion_" . StrLower(activeProcess), "DisableTyping", "0") != "1"
+    } catch {
+        return true
     }
 }
 
-AddToggleSwitch(GuiObj, x, y, defaultVal, textLabel) {
-    global ToggleOnBg, ToggleOffBg, ThemeFg
-    
-    ; Add descriptive text label (styled with current theme text color)
-    GuiObj.Add("Text", "x" . x . " y" . y . " w160 r1 c" . ThemeFg, textLabel)
-    
-    btnText := defaultVal ? "ON" : "OFF"
-    btnBg := defaultVal ? ToggleOnBg : ToggleOffBg
-    
-    ; Add toggle button
-    toggleBtn := GuiObj.Add("Text", "x" . (x + 165) . " y" . (y - 2) . " w45 h20 Center +Border +0x200 " . btnBg, btnText)
-    toggleBtn.OnEvent("Click", OnToggleClick)
-    
-    return toggleBtn
-}
-
-OnToggleClick(Ctrl, *) {
-    global ToggleOnBg, ToggleOffBg
-    if (Ctrl.Text == "ON") {
-        Ctrl.Text := "OFF"
-        Ctrl.Opt(ToggleOffBg)
-    } else {
-        Ctrl.Text := "ON"
-        Ctrl.Opt(ToggleOnBg)
+IsBrowserEnabled(*) {
+    try {
+        activeProcess := WinGetProcessName("A")
+        if (activeProcess == "") {
+            return true
+        }
+        return IniRead(SettingsFile, "Exclusion_" . StrLower(activeProcess), "DisableBrowser", "0") != "1"
+    } catch {
+        return true
     }
 }
 
-SetToggleState(toggleCtrl, val) {
-    global ToggleOnBg, ToggleOffBg
-    if (val) {
-        toggleCtrl.Text := "ON"
-        toggleCtrl.Opt(ToggleOnBg)
-    } else {
-        toggleCtrl.Text := "OFF"
-        toggleCtrl.Opt(ToggleOffBg)
-    }
+IsTypingActive(*) {
+    return IsNotTerminalActive() and IsTypingEnabled()
 }
 
-GetToggleValue(toggleCtrl) {
-    return (toggleCtrl.Text == "ON") ? 1 : 0
+IsCaretMovementActive(*) {
+    return IsNotTerminalActive() and not IsBrowserActive() and IsTypingEnabled()
+}
+
+IsBrowserShortcutActive(*) {
+    return IsBrowserActive() and IsBrowserEnabled()
 }
 
 ; Action Functions
 DoCapsLockRemap(*) {
     Send("{Blind}{Tab}")
+}
+
+DoBluetoothRemap(*) {
+    Run("explorer.exe ms-settings:bluetooth")
 }
 
 DoDeleteLine(*) {
@@ -441,20 +466,102 @@ ToggleMaster() {
 }
 
 ; ==============================================================================
-; MODERN CONFIGURATION GUI (DARK THEME)
+; SYSTEM THEME DETECTION & MODERN DYNAMIC TOGGLE SWITCH CONTROLS
 ; ==============================================================================
 
-ShowGui(*) {
-    global MyGui
-    if (MyGui) {
-        MyGui.Show()
-    } else {
-        CreateGui()
+IsSystemLightTheme() {
+    try {
+        return RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme") == 1
+    } catch {
+        return 0
     }
 }
 
-CreateGui() {
-    global MyGui, ChkCapsLockToTab, ChkHighPriority, ChkEnabled
+LoadTheme() {
+    global ThemeBg, ThemeFg, ThemeControlBg, ToggleOnBg, ToggleOffBg, EditBg, GroupBorderColor, AppTheme
+    
+    themeStyle := AppTheme
+    if (themeStyle == "System") {
+        themeStyle := IsSystemLightTheme() ? "Light" : "Dark"
+    }
+    
+    if (themeStyle == "Light") {
+        ThemeBg := "F3F3F3"
+        ThemeFg := "1A1A1A"
+        ThemeControlBg := "FFFFFF"
+        ToggleOnBg := "Background4CAF50 cWhite"
+        ToggleOffBg := "BackgroundD0D0D0 c555555"
+        EditBg := "BackgroundFFFFFF c000000"
+        GroupBorderColor := "808080"
+    } else {
+        ThemeBg := "121214"
+        ThemeFg := "DCDCDC"
+        ThemeControlBg := "1A1A1E"
+        ToggleOnBg := "Background00FF88 c121214"
+        ToggleOffBg := "Background2D2D30 cA0A0A0"
+        EditBg := "Background242428 cFFFFFF"
+        GroupBorderColor := "DCDCDC"
+    }
+}
+
+AddToggleSwitch(GuiObj, x, y, defaultVal, textLabel) {
+    global ToggleOnBg, ToggleOffBg, ThemeFg
+    
+    ; Add descriptive text label (styled with current theme text color and rounded layout spacing)
+    GuiObj.Add("Text", "x" . x . " y" . y . " w160 r1 c" . ThemeFg, textLabel)
+    
+    btnText := defaultVal ? "ON" : "OFF"
+    btnBg := defaultVal ? ToggleOnBg : ToggleOffBg
+    
+    ; Add toggle button
+    toggleBtn := GuiObj.Add("Text", "x" . (x + 165) . " y" . (y - 2) . " w45 h20 Center +Border +0x200 " . btnBg, btnText)
+    toggleBtn.OnEvent("Click", OnToggleClick)
+    
+    return toggleBtn
+}
+
+OnToggleClick(Ctrl, *) {
+    global ToggleOnBg, ToggleOffBg
+    if (Ctrl.Text == "ON") {
+        Ctrl.Text := "OFF"
+        Ctrl.Opt(ToggleOffBg)
+    } else {
+        Ctrl.Text := "ON"
+        Ctrl.Opt(ToggleOnBg)
+    }
+}
+
+SetToggleState(toggleCtrl, val) {
+    global ToggleOnBg, ToggleOffBg
+    if (val) {
+        toggleCtrl.Text := "ON"
+        toggleCtrl.Opt(ToggleOnBg)
+    } else {
+        toggleCtrl.Text := "OFF"
+        toggleCtrl.Opt(ToggleOffBg)
+    }
+}
+
+GetToggleValue(toggleCtrl) {
+    return (toggleCtrl.Text == "ON") ? 1 : 0
+}
+
+; ==============================================================================
+; MODERN CONFIGURATION GUI (SYSTEM THEMED, PILL TOGGLES)
+; ==============================================================================
+
+ShowGui(startTab := 1) {
+    global MyGui, TabCtrl
+    if (MyGui) {
+        TabCtrl.Value := startTab
+        MyGui.Show()
+    } else {
+        CreateGui(startTab)
+    }
+}
+
+CreateGui(startTab := 1) {
+    global MyGui, TabCtrl, ChkCapsLockToTab, ChkHighPriority, ChkRemapWinK, DDLTheme, ChkEnabled
     global DDLLineModifier, DDLWordModifier
     global DDLTabLeftMod, DDLTabLeftKey, DDLTabRightMod, DDLTabRightKey
     global ChkDeleteLine, ChkSelectToEndOfLine, ChkSelectToStartOfLine
@@ -463,42 +570,46 @@ CreateGui() {
     global ChkSelectWordLeft, ChkMoveWordRight, ChkMoveWordLeft
     global ChkBrowserBack, ChkBrowserForward, ChkBrowserTabLeft, ChkBrowserTabRight
     global ChkStartup, SearchEdit, ShortcutLV
-    global Enabled, CapsLockToTab, HighPriority, LineModifier, WordModifier, TabLeft, TabRight
+    global ExclusionLV, SearchExclusionEdit, ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
+    global Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme, LineModifier, WordModifier, TabLeft, TabRight
 
     MyGui := Gui("-MinimizeBox -MaximizeBox", "KeyMapper Settings Panel")
     MyGui.BackColor := ThemeBg
     MyGui.SetFont("s10 c" . ThemeFg, "Segoe UI")
     
-    TabCtrl := MyGui.Add("Tab3", "w550 h460 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "Conflict Reference", "About"])
+    ; Expanded dimensions to provide standard Windows 11 rounded layouts breathing room
+    TabCtrl := MyGui.Add("Tab3", "w550 h480 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "App Exclusions", "Conflict Reference", "About"])
     
     ; --- TAB 1: Core Mappings ---
     TabCtrl.UseTab(1)
     
-    MyGui.Add("GroupBox", "w510 h105 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
+    MyGui.Add("GroupBox", "w510 h165 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
     ChkCapsLockToTab := AddToggleSwitch(MyGui, 40, 75, CapsLockToTab, "Remap CapsLock to Tab")
-    ChkHighPriority := AddToggleSwitch(MyGui, 40, 110, HighPriority, "High Priority Hook Mode")
+    ChkHighPriority := AddToggleSwitch(MyGui, 40, 105, HighPriority, "High Priority Hook Mode")
+    ChkRemapWinK := AddToggleSwitch(MyGui, 40, 135, RemapWinK, "Remap Win+K to Bluetooth")
     
-    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y165", "Typing Modifier Assignments")
-    MyGui.Add("Text", "x40 y190 c" . ThemeFg, "Line-level modifier:")
-    DDLLineModifier := MyGui.Add("DropDownList", "x200 y185 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y190 c888888", "(Mac Cmd-like line tasks)")
+    MyGui.Add("Text", "x40 y182 c" . ThemeFg, "Interface theme color:")
+    DDLTheme := MyGui.Add("DropDownList", "x200 y178 w100", ["System", "Dark", "Light"])
     
-    MyGui.Add("Text", "x40 y230 c" . ThemeFg, "Word-level modifier:")
-    DDLWordModifier := MyGui.Add("DropDownList", "x200 y225 w100", ["Ctrl", "Alt", "Win"])
-    MyGui.Add("Text", "x315 y230 c888888", "(Mac Option-like word tasks)")
+    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y225", "Typing Modifier Assignments")
+    MyGui.Add("Text", "x40 y250 c" . ThemeFg, "Line-level modifier:")
+    DDLLineModifier := MyGui.Add("DropDownList", "x200 y245 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x315 y250 c888888", "(Mac Cmd-like line tasks)")
     
-    MyGui.Add("GroupBox", "w510 h150 c" . GroupBorderColor . " x20 y285", "Browser Navigation Shortcuts")
-    MyGui.Add("Text", "x40 y310 c" . ThemeFg, "Tab Navigation:")
-    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y305 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y310 c" . ThemeFg, "+")
-    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y305 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("Text", "x40 y290 c" . ThemeFg, "Word-level modifier:")
+    DDLWordModifier := MyGui.Add("DropDownList", "x200 y285 w100", ["Ctrl", "Alt", "Win"])
+    MyGui.Add("Text", "x315 y290 c888888", "(Mac Option-like word tasks)")
     
-    MyGui.Add("Text", "x40 y355 c" . ThemeFg, "History Navigation:")
-    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y350 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
-    MyGui.Add("Text", "x270 y355 c" . ThemeFg, "+")
-    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y350 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y345", "Browser Navigation Shortcuts")
+    MyGui.Add("Text", "x40 y370 c" . ThemeFg, "Tab Navigation:")
+    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y365 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y370 c" . ThemeFg, "+")
+    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y365 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
     
-    MyGui.Add("Text", "x40 y400 c888888", "Configuring the base key automatically maps the opposite side key.")
+    MyGui.Add("Text", "x40 y410 c" . ThemeFg, "History Navigation:")
+    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y405 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y410 c" . ThemeFg, "+")
+    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y405 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
 
     ; --- TAB 2: Hotkeys Checklist ---
     TabCtrl.UseTab(2)
@@ -534,8 +645,38 @@ CreateGui() {
     ChkBrowserTabLeft := AddToggleSwitch(MyGui, 280, 345, 1, "Tab switch left")
     ChkBrowserTabRight := AddToggleSwitch(MyGui, 280, 375, 1, "Tab switch right")
 
-    ; --- TAB 3: Conflict Reference ---
+    ; --- TAB 3: App Exclusions ---
     TabCtrl.UseTab(3)
+    MyGui.Add("GroupBox", "w510 h380 c" . GroupBorderColor . " x20 y50", "App-Specific Bypass Settings")
+    MyGui.Add("Text", "x40 y75 c" . ThemeFg, "Search app:")
+    SearchExclusionEdit := MyGui.Add("Edit", "x120 y72 w220 h24 " . EditBg . " -E0x200")
+    SearchExclusionEdit.OnEvent("Change", OnSearchExclusionChange)
+    
+    ExclusionLV := MyGui.Add("ListView", "x40 y105 w300 h220 c" . ThemeFg . " Background" . ThemeControlBg . " Grid -Multi", ["Executable Name"])
+    ExclusionLV.ModifyCol(1, 275)
+    ExclusionLV.OnEvent("Click", OnExclusionLVClick)
+    
+    AddBtn := MyGui.Add("Button", "x40 y335 w140 h30", "Add Custom App")
+    AddBtn.OnEvent("Click", OnAddExclusionClick)
+    
+    RemoveBtn := MyGui.Add("Button", "x200 y335 w140 h30", "Remove App")
+    RemoveBtn.OnEvent("Click", OnRemoveExclusionClick)
+    
+    ; Specific App Exclusion settings (displayed on selection)
+    MyGui.Add("GroupBox", "w150 h250 c" . GroupBorderColor . " x360 y105", "Selection Actions")
+    ChkExclCapsLock := AddToggleSwitch(MyGui, 370, 135, 0, "Bypass CapsLock")
+    ChkExclTyping := AddToggleSwitch(MyGui, 370, 195, 0, "Bypass Modifiers")
+    ChkExclBrowser := AddToggleSwitch(MyGui, 370, 255, 0, "Bypass Browser")
+    
+    ; Bind events on toggles to save immediately in INI
+    ChkExclCapsLock.OnEvent("Click", OnToggleExclusionClick)
+    ChkExclTyping.OnEvent("Click", OnToggleExclusionClick)
+    ChkExclBrowser.OnEvent("Click", OnToggleExclusionClick)
+    
+    PopulateExclusionLV()
+
+    ; --- TAB 4: Conflict Reference ---
+    TabCtrl.UseTab(4)
     MyGui.Add("Text", "x20 y55 c" . ThemeFg, "Search standard Windows & Application hotkeys to avoid overlaps:")
     SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 " . EditBg . " -E0x200")
     SearchEdit.OnEvent("Change", OnSearchEditChange)
@@ -548,8 +689,8 @@ CreateGui() {
     
     PopulateConflictDatabase("")
  
-    ; --- TAB 4: About ---
-    TabCtrl.UseTab(4)
+    ; --- TAB 5: About ---
+    TabCtrl.UseTab(5)
     MyGui.SetFont("Bold s14 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"))
     MyGui.Add("Text", "x20 y60", "KeyMapper Utility")
     MyGui.SetFont("norm s10 c" . ThemeFg)
@@ -568,17 +709,20 @@ CreateGui() {
     
     ; --- Bottom Controls ---
     TabCtrl.UseTab()
-    ChkEnabled := AddToggleSwitch(MyGui, 20, 478, Enabled, "Enable Typing Remaps")
+    ChkEnabled := AddToggleSwitch(MyGui, 20, 498, Enabled, "Enable Typing Remaps")
     
-    SaveBtn := MyGui.Add("Button", "x300 y472 w110 h30 Default", "Save & Apply")
+    SaveBtn := MyGui.Add("Button", "x300 y492 w110 h30 Default", "Save & Apply")
     SaveBtn.OnEvent("Click", OnSaveClick)
     
-    CloseBtn := MyGui.Add("Button", "x420 y472 w110 h30", "Close to Tray")
+    CloseBtn := MyGui.Add("Button", "x420 y492 w110 h30", "Close to Tray")
     CloseBtn.OnEvent("Click", (*) => MyGui.Hide())
     
     SetGuiValues()
     
     MyGui.OnEvent("Close", (*) => MyGui.Hide())
+    
+    ; Select initial start tab index
+    TabCtrl.Value := startTab
     MyGui.Show()
 }
 
@@ -658,7 +802,7 @@ EncodeTabNav(modChoice, keyChoice) {
 
 SetGuiValues() {
     global SettingsFile, MyGui
-    global ChkCapsLockToTab, ChkHighPriority, ChkEnabled
+    global ChkCapsLockToTab, ChkHighPriority, ChkRemapWinK, DDLTheme, ChkEnabled
     global DDLLineModifier, DDLWordModifier
     global DDLTabLeftMod, DDLTabLeftKey, DDLTabRightMod, DDLTabRightKey
     global ChkDeleteLine, ChkSelectToEndOfLine, ChkSelectToStartOfLine
@@ -667,11 +811,22 @@ SetGuiValues() {
     global ChkSelectWordLeft, ChkMoveWordRight, ChkMoveWordLeft
     global ChkBrowserBack, ChkBrowserForward, ChkBrowserTabLeft, ChkBrowserTabRight
     global ChkStartup
-    global Enabled, CapsLockToTab, HighPriority, LineModifier, WordModifier, TabLeft, TabRight
+    global Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme, LineModifier, WordModifier, TabLeft, TabRight, BrowserBackKey, BrowserForwardKey
 
     SetToggleState(ChkCapsLockToTab, CapsLockToTab)
     SetToggleState(ChkHighPriority, HighPriority)
+    SetToggleState(ChkRemapWinK, RemapWinK)
     SetToggleState(ChkEnabled, Enabled)
+    
+    ; App Theme dropdown choice
+    themeIdx := 1
+    for i, t in ["System", "Dark", "Light"] {
+        if (t == AppTheme) {
+            themeIdx := i
+            break
+        }
+    }
+    DDLTheme.Choose(themeIdx)
     
     DDLLineModifier.Choose(GetIndexForModifier(LineModifier))
     DDLWordModifier.Choose(GetIndexForModifier(WordModifier))
@@ -745,8 +900,8 @@ SetGuiValues() {
 }
 
 OnSaveClick(*) {
-    global SettingsFile, MyGui
-    global ChkCapsLockToTab, ChkHighPriority, ChkEnabled
+    global SettingsFile, MyGui, TabCtrl
+    global ChkCapsLockToTab, ChkHighPriority, ChkRemapWinK, DDLTheme, ChkEnabled
     global DDLLineModifier, DDLWordModifier
     global DDLTabLeftMod, DDLTabLeftKey, DDLTabRightMod, DDLTabRightKey
     global ChkDeleteLine, ChkSelectToEndOfLine, ChkSelectToStartOfLine
@@ -756,7 +911,6 @@ OnSaveClick(*) {
     global ChkBrowserBack, ChkBrowserForward, ChkBrowserTabLeft, ChkBrowserTabRight
     global ChkStartup
 
-    ; Check if line and word modifiers are the same
     if (DDLLineModifier.Text == DDLWordModifier.Text) {
         warningMsg := "You have selected the same modifier (" DDLLineModifier.Text ") for both Line-Level and Word-Level shortcuts. This could lead to serious conflicts.`n`nAre you sure you want to save this configuration?"
         if (MsgBox(warningMsg, "Potential Overlap Warning", "YesNo Icon!") == "No") {
@@ -768,6 +922,8 @@ OnSaveClick(*) {
     IniWrite(GetToggleValue(ChkEnabled), SettingsFile, "General", "Enabled")
     IniWrite(GetToggleValue(ChkCapsLockToTab), SettingsFile, "General", "CapsLockToTab")
     IniWrite(GetToggleValue(ChkHighPriority), SettingsFile, "General", "HighPriority")
+    IniWrite(GetToggleValue(ChkRemapWinK), SettingsFile, "General", "RemapWinK")
+    IniWrite(DDLTheme.Text, SettingsFile, "General", "Theme")
     
     ; Save Modifiers
     IniWrite(DDLLineModifier.Text, SettingsFile, "Modifiers", "LineModifier")
@@ -790,6 +946,7 @@ OnSaveClick(*) {
     IniWrite(GetToggleValue(ChkSelectToStartOfLine), SettingsFile, "Hotkeys", "SelectToStartOfLine")
     IniWrite(GetToggleValue(ChkMoveToEndOfLine), SettingsFile, "Hotkeys", "MoveToEndOfLine")
     IniWrite(GetToggleValue(ChkMoveToStartOfLine), SettingsFile, "Hotkeys", "MoveToStartOfLine")
+    IniWrite(GetToggleValue(GetToggleValue(ChkMoveToTop)), SettingsFile, "Hotkeys", "MoveToTop") ; safety check
     IniWrite(GetToggleValue(ChkMoveToTop), SettingsFile, "Hotkeys", "MoveToTop")
     IniWrite(GetToggleValue(ChkMoveToBottom), SettingsFile, "Hotkeys", "MoveToBottom")
     IniWrite(GetToggleValue(ChkSelectToTop), SettingsFile, "Hotkeys", "SelectToTop")
@@ -809,10 +966,19 @@ OnSaveClick(*) {
     ; Startup Setting
     SetStartup(GetToggleValue(ChkStartup))
     
-    MyGui.Hide()
+    ; Preserve currently active tab index to reload right back to it!
+    activeTab := TabCtrl.Value
+    
     TrayTip("KeyMapper", "Settings saved successfully! Restarting engine...", 1)
-    Sleep(600)
-    Reload()
+    Sleep(500)
+    
+    ; Restart engine while keeping current settings window open in foreground!
+    if A_IsCompiled {
+        Run('"' A_ScriptFullPath '" /restart /showgui ' . activeTab)
+    } else {
+        Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '" /showgui ' . activeTab)
+    }
+    ExitApp()
 }
 
 SetStartup(enable) {
@@ -828,6 +994,158 @@ SetStartup(enable) {
             }
         }
     }
+}
+
+; ==============================================================================
+; EXCLUSIONS MANAGEMENT SYSTEM
+; ==============================================================================
+
+OnSearchExclusionChange(*) {
+    global SearchExclusionEdit
+    PopulateExclusionLV(SearchExclusionEdit.Text)
+}
+
+PopulateExclusionLV(query := "") {
+    global ExclusionLV, ExclusionAppsList
+    ExclusionLV.Delete()
+    
+    query := StrLower(query)
+    for appName in ExclusionAppsList {
+        if (appName == "") {
+            continue
+        }
+        if (query == "" or InStr(StrLower(appName), query)) {
+            ExclusionLV.Add(, appName)
+        }
+    }
+}
+
+OnExclusionLVClick(LV, RowNumber) {
+    global SettingsFile
+    global ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
+    
+    if (RowNumber == 0) {
+        return
+    }
+    
+    appName := LV.GetText(RowNumber, 1)
+    if (appName == "") {
+        return
+    }
+    
+    caps := IniRead(SettingsFile, "Exclusion_" . appName, "DisableCapsLock", "0") == "1" ? 1 : 0
+    type := IniRead(SettingsFile, "Exclusion_" . appName, "DisableTyping", "0") == "1" ? 1 : 0
+    brow := IniRead(SettingsFile, "Exclusion_" . appName, "DisableBrowser", "0") == "1" ? 1 : 0
+    
+    SetToggleState(ChkExclCapsLock, caps)
+    SetToggleState(ChkExclTyping, type)
+    SetToggleState(ChkExclBrowser, brow)
+}
+
+OnToggleExclusionClick(Ctrl, *) {
+    global ExclusionLV, SettingsFile
+    global ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
+    
+    row := ExclusionLV.GetNext(0)
+    if (row == 0) {
+        MsgBox("Please select an application from the exclusions list first.")
+        return
+    }
+    
+    appName := ExclusionLV.GetText(row, 1)
+    if (appName == "") {
+        return
+    }
+    
+    ; Flip toggle button state
+    OnToggleClick(Ctrl)
+    val := GetToggleValue(Ctrl)
+    
+    ; Save exclusion choice to ini immediately to preserve states during list clicks
+    if (Ctrl == ChkExclCapsLock) {
+        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableCapsLock")
+    } else if (Ctrl == ChkExclTyping) {
+        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableTyping")
+    } else if (Ctrl == ChkExclBrowser) {
+        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableBrowser")
+    }
+}
+
+OnAddExclusionClick(*) {
+    global ExclusionAppsList, SettingsFile
+    
+    ib := InputBox("Enter the application process executable name to exclude:`n(e.g., discord.exe or photoshop.exe)", "Add Application Exclusion", "w300 h150")
+    if (ib.Result == "OK" and ib.Value != "") {
+        appName := Trim(ib.Value)
+        if not InStr(appName, ".exe") {
+            appName .= ".exe"
+        }
+        appName := StrLower(appName)
+        
+        ; Verify duplicate
+        exists := false
+        for app in ExclusionAppsList {
+            if (app == appName) {
+                exists := true
+                break
+            }
+        }
+        
+        if (!exists) {
+            ExclusionAppsList.Push(appName)
+            SaveExclusionAppsList()
+            
+            ; Set safe defaults (disable typing modifiers and browser features)
+            IniWrite("0", SettingsFile, "Exclusion_" . appName, "DisableCapsLock")
+            IniWrite("1", SettingsFile, "Exclusion_" . appName, "DisableTyping")
+            IniWrite("1", SettingsFile, "Exclusion_" . appName, "DisableBrowser")
+            
+            PopulateExclusionLV()
+        }
+    }
+}
+
+OnRemoveExclusionClick(*) {
+    global ExclusionLV, ExclusionAppsList, SettingsFile
+    
+    row := ExclusionLV.GetNext(0)
+    if (row == 0) {
+        MsgBox("Please select an application to remove.")
+        return
+    }
+    
+    appName := ExclusionLV.GetText(row, 1)
+    if (MsgBox("Are you sure you want to remove " . appName . " from exclusions?", "Confirm Exclusion Removal", "YesNo Icon!") == "Yes") {
+        newArray := []
+        for app in ExclusionAppsList {
+            if (app != appName) {
+                newArray.Push(app)
+            }
+        }
+        ExclusionAppsList := newArray
+        SaveExclusionAppsList()
+        
+        try {
+            IniDelete(SettingsFile, "Exclusion_" . appName)
+        }
+        
+        PopulateExclusionLV()
+    }
+}
+
+SaveExclusionAppsList() {
+    global ExclusionAppsList, SettingsFile
+    appStr := ""
+    for app in ExclusionAppsList {
+        if (app == "") {
+            continue
+        }
+        if (appStr != "") {
+            appStr .= ","
+        }
+        appStr .= app
+    }
+    IniWrite(appStr, SettingsFile, "Exclusions", "Apps")
 }
 
 ; ==============================================================================
@@ -848,6 +1166,7 @@ PopulateConflictDatabase(query) {
         {key: "Win + R", action: "Open Run Dialog", scope: "Windows OS", conflict: "System Reserved"},
         {key: "Win + D", action: "Show/Hide Desktop", scope: "Windows OS", conflict: "System Reserved"},
         {key: "Win + L", action: "Lock Laptop", scope: "Windows OS", conflict: "System Reserved"},
+        {key: "Win + K", action: "Open Cast Dialog (Default)", scope: "Windows OS", conflict: "Medium (Customizable)"},
         {key: "Alt + Tab", action: "Quick App Switcher", scope: "Windows OS", conflict: "System Reserved"},
         {key: "Ctrl + Alt + Tab", action: "Sticky App Switcher", scope: "Windows OS", conflict: "System Reserved"},
         {key: "Ctrl + Shift + Esc", action: "Open Task Manager", scope: "Windows OS", conflict: "System Reserved"},
