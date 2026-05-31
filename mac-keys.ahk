@@ -1,6 +1,20 @@
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
+; Self-elevate to Administrator to allow remapping in elevated Windows Terminals, Cmd, and Task Manager
+if not (A_IsAdmin or RegExMatch(DllCall("GetCommandLine", "str"), "i)/restart")) {
+    try {
+        if A_IsCompiled {
+            Run('*RunAs "' A_ScriptFullPath '" /restart')
+        } else {
+            Run('*RunAs "' A_AhkPath '" /restart "' A_ScriptFullPath '"')
+        }
+        ExitApp()
+    } catch {
+        ; User clicked No to UAC, let the script run with standard privileges
+    }
+}
+
 ; ==============================================================================
 ; KepMapper - Lightweight & Battery-Efficient Key Mapping Utility
 ; Designed by Antigravity AI
@@ -48,10 +62,10 @@ global CapsLockToTab := 1
 global HighPriority := 1
 global LineModifier := "Alt"
 global WordModifier := "Ctrl"
-global TabLeft := "^+["
-global TabRight := "^+]"
-global BrowserBackKey := "^["
-global BrowserForwardKey := "^]"
+global TabLeft := "^["
+global TabRight := "^]"
+global BrowserBackKey := "!["
+global BrowserForwardKey := "!]"
 
 ; --- INITIALIZATION ---
 LoadSettings()
@@ -82,8 +96,10 @@ LoadSettings() {
         IniWrite("1", SettingsFile, "General", "HighPriority")
         IniWrite("Alt", SettingsFile, "Modifiers", "LineModifier")
         IniWrite("Ctrl", SettingsFile, "Modifiers", "WordModifier")
-        IniWrite("^+[", SettingsFile, "TabSwitching", "TabLeft")
-        IniWrite("^+]", SettingsFile, "TabSwitching", "TabRight")
+        IniWrite("^[", SettingsFile, "TabSwitching", "TabLeft")
+        IniWrite("^]", SettingsFile, "TabSwitching", "TabRight")
+        IniWrite("![", SettingsFile, "TabSwitching", "BrowserBack")
+        IniWrite("!]", SettingsFile, "TabSwitching", "BrowserForward")
         
         ; Hotkeys
         for hk in ["DeleteLine", "SelectToEndOfLine", "SelectToStartOfLine", "MoveToEndOfLine", 
@@ -98,14 +114,14 @@ LoadSettings() {
     CapsLockToTab := IniRead(SettingsFile, "General", "CapsLockToTab", "1") == "1" ? 1 : 0
     HighPriority := IniRead(SettingsFile, "General", "HighPriority", "1") == "1" ? 1 : 0
     
-    LineModifier := IniRead(SettingsFile, "Modifiers", "LineModifier", "Ctrl")
-    WordModifier := IniRead(SettingsFile, "Modifiers", "WordModifier", "Alt")
+    LineModifier := IniRead(SettingsFile, "Modifiers", "LineModifier", "Alt")
+    WordModifier := IniRead(SettingsFile, "Modifiers", "WordModifier", "Ctrl")
     
-    TabLeft := IniRead(SettingsFile, "TabSwitching", "TabLeft", "^+[")
-    TabRight := IniRead(SettingsFile, "TabSwitching", "TabRight", "^+]")
+    TabLeft := IniRead(SettingsFile, "TabSwitching", "TabLeft", "^[")
+    TabRight := IniRead(SettingsFile, "TabSwitching", "TabRight", "^]")
     
-    BrowserBackKey := "^["
-    BrowserForwardKey := "^]"
+    BrowserBackKey := IniRead(SettingsFile, "TabSwitching", "BrowserBack", "![")
+    BrowserForwardKey := IniRead(SettingsFile, "TabSwitching", "BrowserForward", "!]")
 }
 
 GetModifierSymbol(name) {
@@ -125,10 +141,13 @@ RegisterAllHotkeys() {
     lineSym := GetModifierSymbol(LineModifier)
     wordSym := GetModifierSymbol(WordModifier)
     
-    ; 1. CapsLock remapping
+    ; 1. CapsLock remapping (runs globally so Tab works in terminal too)
     if (CapsLockToTab) {
         TryRegister("*CapsLock", DoCapsLockRemap)
     }
+    
+    ; Exclude command terminal windows from custom text editing shortcuts to prevent key conflicts
+    HotIf(IsNotTerminalActive)
     
     ; 2. Line-Level Actions
     if (IniRead(SettingsFile, "Hotkeys", "DeleteLine", "1") == "1") {
@@ -176,6 +195,9 @@ RegisterAllHotkeys() {
         TryRegister(prefix . wordSym . "Left", DoMoveWordLeft)
     }
     
+    ; Reset HotIf exclusion for terminals
+    HotIf()
+    
     ; 4. Browser Specific Actions
     HotIf(IsBrowserActive)
     if (IniRead(SettingsFile, "Hotkeys", "BrowserTabLeft", "1") == "1" and TabLeft != "") {
@@ -207,6 +229,13 @@ IsBrowserActive(*) {
         or WinActive("ahk_exe msedge.exe") 
         or WinActive("ahk_exe brave.exe") 
         or WinActive("ahk_exe opera.exe")
+}
+
+IsNotTerminalActive(*) {
+    return not (WinActive("ahk_exe WindowsTerminal.exe") 
+        or WinActive("ahk_class ConsoleWindowClass") 
+        or WinActive("ahk_exe powershell.exe") 
+        or WinActive("ahk_exe cmd.exe"))
 }
 
 ; Action Functions
@@ -362,18 +391,18 @@ CreateGui() {
     DDLWordModifier := MyGui.Add("DropDownList", "x200 y215 w100", ["Ctrl", "Alt", "Win"])
     MyGui.Add("Text", "x315 y220 c888888", "(Mac Option-like word tasks)")
     
-    MyGui.Add("GroupBox", "w510 h150 cDCDCDC x20 y275", "Browser Tab Navigation Shortcuts")
-    MyGui.Add("Text", "x40 y300", "Tab Left:")
-    DDLTabLeftMod := MyGui.Add("DropDownList", "x150 y295 w100", ["Ctrl + Shift", "Alt", "Ctrl", "Win", "None"])
-    MyGui.Add("Text", "x260 y300", "+")
-    DDLTabLeftKey := MyGui.Add("DropDownList", "x280 y295 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("GroupBox", "w510 h150 cDCDCDC x20 y275", "Browser Navigation Shortcuts")
+    MyGui.Add("Text", "x40 y300", "Tab Navigation:")
+    DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y295 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y300", "+")
+    DDLTabLeftKey := MyGui.Add("DropDownList", "x290 y295 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
     
-    MyGui.Add("Text", "x40 y345", "Tab Right:")
-    DDLTabRightMod := MyGui.Add("DropDownList", "x150 y340 w100", ["Ctrl + Shift", "Alt", "Ctrl", "Win", "None"])
-    MyGui.Add("Text", "x260 y345", "+")
-    DDLTabRightKey := MyGui.Add("DropDownList", "x280 y340 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
+    MyGui.Add("Text", "x40 y345", "History Navigation:")
+    DDLTabRightMod := MyGui.Add("DropDownList", "x160 y340 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
+    MyGui.Add("Text", "x270 y345", "+")
+    DDLTabRightKey := MyGui.Add("DropDownList", "x290 y340 w80", ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"])
     
-    MyGui.Add("Text", "x40 y390 c888888", "Custom combos prevent blocking standard single bracket [ and ] typing.")
+    MyGui.Add("Text", "x40 y390 c888888", "Configuring the base key automatically maps the opposite side key.")
 
     ; --- TAB 2: Hotkeys Checklist ---
     TabCtrl.UseTab(2)
@@ -470,6 +499,19 @@ GetIndexForModifier(name) {
     return 1
 }
 
+GetMatchingOppositeKey(key) {
+    if (key == "[") {
+        return "]"
+    }
+    if (key == "Left") {
+        return "Right"
+    }
+    if (key == "PageUp") {
+        return "PageDown"
+    }
+    return "]"
+}
+
 DecodeTabNav(hotkeyStr, &modChoice, &keyChoice) {
     modChoice := "Ctrl + Shift"
     keyChoice := "["
@@ -539,10 +581,10 @@ SetGuiValues() {
     DDLWordModifier.Choose(GetIndexForModifier(WordModifier))
     
     DecodeTabNav(TabLeft, &leftMod, &leftKey)
-    DecodeTabNav(TabRight, &rightMod, &rightKey)
+    DecodeTabNav(BrowserBackKey, &rightMod, &rightKey)
     
     ; Find index in dropdown lists
-    modList := ["Ctrl + Shift", "Alt", "Ctrl", "Win", "None"]
+    modList := ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"]
     keyList := ["[", "]", "Left", "Right", "PageUp", "PageDown", "Tab"]
     
     leftModIdx := 1
@@ -637,9 +679,14 @@ OnSaveClick(*) {
     
     ; Save Tab Navigation
     leftNav := EncodeTabNav(DDLTabLeftMod.Text, DDLTabLeftKey.Text)
-    rightNav := EncodeTabNav(DDLTabRightMod.Text, DDLTabRightKey.Text)
+    rightNav := EncodeTabNav(DDLTabLeftMod.Text, GetMatchingOppositeKey(DDLTabLeftKey.Text))
     IniWrite(leftNav, SettingsFile, "TabSwitching", "TabLeft")
     IniWrite(rightNav, SettingsFile, "TabSwitching", "TabRight")
+    
+    backNav := EncodeTabNav(DDLTabRightMod.Text, DDLTabRightKey.Text)
+    fwdNav := EncodeTabNav(DDLTabRightMod.Text, GetMatchingOppositeKey(DDLTabRightKey.Text))
+    IniWrite(backNav, SettingsFile, "TabSwitching", "BrowserBack")
+    IniWrite(fwdNav, SettingsFile, "TabSwitching", "BrowserForward")
     
     ; Save Hotkey Checks
     IniWrite(ChkDeleteLine.Value, SettingsFile, "Hotkeys", "DeleteLine")
