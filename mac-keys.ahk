@@ -31,6 +31,7 @@ global SettingsFile := A_ScriptDir "\settings.ini"
 
 ; Global GUI Control References
 global MyGui := ""
+global TabCtrl := ""
 global ChkCapsLockToTab := ""
 global ChkHighPriority := ""
 global ChkRemapWinK := ""
@@ -70,6 +71,11 @@ global SearchExclusionEdit := ""
 global ChkExclCapsLock := ""
 global ChkExclTyping := ""
 global ChkExclBrowser := ""
+
+; Global App Scanning Data
+global InstalledApps := []
+global ExclusionIL := ""
+global DefaultIconIdx := 1
 
 ; Global configuration state variables
 global Enabled := 1
@@ -361,7 +367,7 @@ DoCapsLockRemap(*) {
 }
 
 DoBluetoothRemap(*) {
-    Run("explorer.exe ms-settings:bluetooth")
+    Run("explorer.exe ms-actioncenter:controlcenter/bluetooth")
 }
 
 DoDeleteLine(*) {
@@ -572,26 +578,27 @@ CreateGui(startTab := 1) {
     global ChkStartup, SearchEdit, ShortcutLV
     global ExclusionLV, SearchExclusionEdit, ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
     global Enabled, CapsLockToTab, HighPriority, RemapWinK, AppTheme, LineModifier, WordModifier, TabLeft, TabRight
+    global ExclusionIL
 
     MyGui := Gui("-MinimizeBox -MaximizeBox", "KeyMapper Settings Panel")
     MyGui.BackColor := ThemeBg
     MyGui.SetFont("s10 c" . ThemeFg, "Segoe UI")
     
+    ; Scan installed apps and build the dynamic list and ImageList once on GUI creation!
+    ScanAndBuildAppList()
+    
     ; Expanded dimensions to provide standard Windows 11 rounded layouts breathing room
-    TabCtrl := MyGui.Add("Tab3", "w550 h480 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "App Exclusions", "Conflict Reference", "About"])
+    TabCtrl := MyGui.Add("Tab3", "x20 y15 w740 h480 c" . ThemeFg, ["Core Mappings", "Hotkeys Checklist", "App Exclusions", "Conflict Reference", "About"])
     
     ; --- TAB 1: Core Mappings ---
     TabCtrl.UseTab(1)
     
-    MyGui.Add("GroupBox", "w510 h165 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
+    MyGui.Add("GroupBox", "w700 h165 c" . GroupBorderColor . " x20 y50", "General Hardware & Engine Options")
     ChkCapsLockToTab := AddToggleSwitch(MyGui, 40, 75, CapsLockToTab, "Remap CapsLock to Tab")
     ChkHighPriority := AddToggleSwitch(MyGui, 40, 105, HighPriority, "High Priority Hook Mode")
     ChkRemapWinK := AddToggleSwitch(MyGui, 40, 135, RemapWinK, "Remap Win+K to Bluetooth")
     
-    MyGui.Add("Text", "x40 y182 c" . ThemeFg, "Interface theme color:")
-    DDLTheme := MyGui.Add("DropDownList", "x200 y178 w100", ["System", "Dark", "Light"])
-    
-    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y225", "Typing Modifier Assignments")
+    MyGui.Add("GroupBox", "w700 h110 c" . GroupBorderColor . " x20 y225", "Typing Modifier Assignments")
     MyGui.Add("Text", "x40 y250 c" . ThemeFg, "Line-level modifier:")
     DDLLineModifier := MyGui.Add("DropDownList", "x200 y245 w100", ["Ctrl", "Alt", "Win"])
     MyGui.Add("Text", "x315 y250 c888888", "(Mac Cmd-like line tasks)")
@@ -600,7 +607,7 @@ CreateGui(startTab := 1) {
     DDLWordModifier := MyGui.Add("DropDownList", "x200 y285 w100", ["Ctrl", "Alt", "Win"])
     MyGui.Add("Text", "x315 y290 c888888", "(Mac Option-like word tasks)")
     
-    MyGui.Add("GroupBox", "w510 h110 c" . GroupBorderColor . " x20 y345", "Browser Navigation Shortcuts")
+    MyGui.Add("GroupBox", "w700 h110 c" . GroupBorderColor . " x20 y345", "Browser Navigation Shortcuts")
     MyGui.Add("Text", "x40 y370 c" . ThemeFg, "Tab Navigation:")
     DDLTabLeftMod := MyGui.Add("DropDownList", "x160 y365 w100", ["Ctrl", "Alt", "Ctrl + Shift", "Win", "None"])
     MyGui.Add("Text", "x270 y370 c" . ThemeFg, "+")
@@ -613,7 +620,7 @@ CreateGui(startTab := 1) {
 
     ; --- TAB 2: Hotkeys Checklist ---
     TabCtrl.UseTab(2)
-    MyGui.Add("GroupBox", "w510 h380 c" . GroupBorderColor . " x20 y50", "Toggle Specific Actions & Shortcuts")
+    MyGui.Add("GroupBox", "w700 h380 c" . GroupBorderColor . " x20 y50", "Toggle Specific Actions & Shortcuts")
     
     MyGui.SetFont("Bold s9.5")
     MyGui.Add("Text", "x40 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Line-Level Operations")
@@ -629,44 +636,46 @@ CreateGui(startTab := 1) {
     ChkSelectToBottom := AddToggleSwitch(MyGui, 40, 345, 1, "Select to bottom")
 
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x280 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Word-Level & Navigation")
+    MyGui.Add("Text", "x380 y75 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Word-Level & Navigation")
     MyGui.SetFont("norm s10")
-    ChkDeleteWordLeft := AddToggleSwitch(MyGui, 280, 105, 1, "Delete word left")
-    ChkSelectWordRight := AddToggleSwitch(MyGui, 280, 135, 1, "Select word right")
-    ChkSelectWordLeft := AddToggleSwitch(MyGui, 280, 165, 1, "Select word left")
-    ChkMoveWordRight := AddToggleSwitch(MyGui, 280, 195, 1, "Move word right")
-    ChkMoveWordLeft := AddToggleSwitch(MyGui, 280, 225, 1, "Move word left")
+    ChkDeleteWordLeft := AddToggleSwitch(MyGui, 380, 105, 1, "Delete word left")
+    ChkSelectWordRight := AddToggleSwitch(MyGui, 380, 135, 1, "Select word right")
+    ChkSelectWordLeft := AddToggleSwitch(MyGui, 380, 165, 1, "Select word left")
+    ChkMoveWordRight := AddToggleSwitch(MyGui, 380, 195, 1, "Move word right")
+    ChkMoveWordLeft := AddToggleSwitch(MyGui, 380, 225, 1, "Move word left")
     
     MyGui.SetFont("Bold s9.5")
-    MyGui.Add("Text", "x280 y255 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Browser Navigation")
+    MyGui.Add("Text", "x380 y255 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"), "Browser Navigation")
     MyGui.SetFont("norm s10")
-    ChkBrowserBack := AddToggleSwitch(MyGui, 280, 285, 1, "Back history")
-    ChkBrowserForward := AddToggleSwitch(MyGui, 280, 315, 1, "Forward history")
-    ChkBrowserTabLeft := AddToggleSwitch(MyGui, 280, 345, 1, "Tab switch left")
-    ChkBrowserTabRight := AddToggleSwitch(MyGui, 280, 375, 1, "Tab switch right")
+    ChkBrowserBack := AddToggleSwitch(MyGui, 380, 285, 1, "Back history")
+    ChkBrowserForward := AddToggleSwitch(MyGui, 380, 315, 1, "Forward history")
+    ChkBrowserTabLeft := AddToggleSwitch(MyGui, 380, 345, 1, "Tab switch left")
+    ChkBrowserTabRight := AddToggleSwitch(MyGui, 380, 375, 1, "Tab switch right")
 
     ; --- TAB 3: App Exclusions ---
     TabCtrl.UseTab(3)
-    MyGui.Add("GroupBox", "w510 h380 c" . GroupBorderColor . " x20 y50", "App-Specific Bypass Settings")
+    MyGui.Add("GroupBox", "w700 h380 c" . GroupBorderColor . " x20 y50", "App-Specific Bypass Settings")
     MyGui.Add("Text", "x40 y75 c" . ThemeFg, "Search app:")
-    SearchExclusionEdit := MyGui.Add("Edit", "x120 y72 w220 h24 " . EditBg . " -E0x200")
+    SearchExclusionEdit := MyGui.Add("Edit", "x130 y72 w250 h24 " . EditBg . " -E0x200")
     SearchExclusionEdit.OnEvent("Change", OnSearchExclusionChange)
     
-    ExclusionLV := MyGui.Add("ListView", "x40 y105 w300 h220 c" . ThemeFg . " Background" . ThemeControlBg . " Grid -Multi", ["Executable Name"])
-    ExclusionLV.ModifyCol(1, 275)
+    ExclusionLV := MyGui.Add("ListView", "x40 y105 w380 h260 c" . ThemeFg . " Background" . ThemeControlBg . " Grid -Multi", ["Application Name", "Executable"])
+    ExclusionLV.ModifyCol(1, 220)
+    ExclusionLV.ModifyCol(2, 130)
+    ExclusionLV.SetImageList(ExclusionIL, 1)
     ExclusionLV.OnEvent("Click", OnExclusionLVClick)
     
-    AddBtn := MyGui.Add("Button", "x40 y335 w140 h30", "Add Custom App")
+    AddBtn := MyGui.Add("Button", "x40 y375 w180 h30", "Add Custom App")
     AddBtn.OnEvent("Click", OnAddExclusionClick)
     
-    RemoveBtn := MyGui.Add("Button", "x200 y335 w140 h30", "Remove App")
+    RemoveBtn := MyGui.Add("Button", "x240 y375 w180 h30", "Remove App")
     RemoveBtn.OnEvent("Click", OnRemoveExclusionClick)
     
     ; Specific App Exclusion settings (displayed on selection)
-    MyGui.Add("GroupBox", "w150 h250 c" . GroupBorderColor . " x360 y105", "Selection Actions")
-    ChkExclCapsLock := AddToggleSwitch(MyGui, 370, 135, 0, "Bypass CapsLock")
-    ChkExclTyping := AddToggleSwitch(MyGui, 370, 195, 0, "Bypass Modifiers")
-    ChkExclBrowser := AddToggleSwitch(MyGui, 370, 255, 0, "Bypass Browser")
+    MyGui.Add("GroupBox", "w260 h260 c" . GroupBorderColor . " x440 y105", "Selection Actions")
+    ChkExclCapsLock := AddToggleSwitch(MyGui, 450, 135, 0, "Bypass CapsLock")
+    ChkExclTyping := AddToggleSwitch(MyGui, 450, 195, 0, "Bypass Modifiers")
+    ChkExclBrowser := AddToggleSwitch(MyGui, 450, 255, 0, "Bypass Browser")
     
     ; Bind events on toggles to save immediately in INI
     ChkExclCapsLock.OnEvent("Click", OnToggleExclusionClick)
@@ -678,43 +687,54 @@ CreateGui(startTab := 1) {
     ; --- TAB 4: Conflict Reference ---
     TabCtrl.UseTab(4)
     MyGui.Add("Text", "x20 y55 c" . ThemeFg, "Search standard Windows & Application hotkeys to avoid overlaps:")
-    SearchEdit := MyGui.Add("Edit", "x20 y80 w510 h24 " . EditBg . " -E0x200")
+    SearchEdit := MyGui.Add("Edit", "x20 y80 w700 h24 " . EditBg . " -E0x200")
     SearchEdit.OnEvent("Change", OnSearchEditChange)
     
-    ShortcutLV := MyGui.Add("ListView", "x20 y115 w510 h310 c" . ThemeFg . " Background" . ThemeControlBg . " Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
-    ShortcutLV.ModifyCol(1, 120)
-    ShortcutLV.ModifyCol(2, 180)
-    ShortcutLV.ModifyCol(3, 110)
-    ShortcutLV.ModifyCol(4, 80)
+    ShortcutLV := MyGui.Add("ListView", "x20 y115 w700 h310 c" . ThemeFg . " Background" . ThemeControlBg . " Grid", ["Shortcut", "Description", "Target Scope", "Conflict Risk"])
+    ShortcutLV.ModifyCol(1, 150)
+    ShortcutLV.ModifyCol(2, 280)
+    ShortcutLV.ModifyCol(3, 150)
+    ShortcutLV.ModifyCol(4, 100)
     
     PopulateConflictDatabase("")
  
     ; --- TAB 5: About ---
     TabCtrl.UseTab(5)
     MyGui.SetFont("Bold s14 c" . (IsSystemLightTheme() ? "0066CC" : "00FF88"))
-    MyGui.Add("Text", "x20 y60", "KeyMapper Utility")
+    MyGui.Add("Text", "x20 y60", "KeyMapper Utility v1.1")
     MyGui.SetFont("norm s10 c" . ThemeFg)
-    MyGui.Add("Text", "x20 y95 w510", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
-    MyGui.Add("Text", "x20 y130 w510", "Utility Features:")
-    MyGui.Add("Text", "x40 y155 w480", "• CapsLock remapped to Tab with Shift/Ctrl modifier inheritance.")
-    MyGui.Add("Text", "x40 y180 w480", "• Custom modifiers (Ctrl/Alt/Win) for typing shortcuts.")
-    MyGui.Add("Text", "x40 y205 w480", "• Custom combos for browser tab switching to unlock brackets [ and ].")
-    MyGui.Add("Text", "x40 y230 w480", "• Fully searchable system shortcut conflict reference database.")
-    MyGui.Add("Text", "x40 y255 w480", "• Low-priority (fallback) or High-priority (override) system hook mode.")
+    MyGui.Add("Text", "x20 y95 w700", "Designed for maximum battery efficiency and zero-latency keyboard remapping on Windows.")
+    MyGui.Add("Text", "x20 y130 w700", "Utility Features & System Enhancements:")
+    MyGui.Add("Text", "x40 y155 w660", "• CapsLock Hardware Remap: Remapped to Tab with Shift/Ctrl modifier inheritance.")
+    MyGui.Add("Text", "x40 y180 w660", "• Modifier Customization: Set custom modifier keys for advanced line-level & word-level shortcuts.")
+    MyGui.Add("Text", "x40 y205 w660", "• Dynamic App Exclusions: Live-scanned installed applications with high-quality system logo icons.")
+    MyGui.Add("Text", "x40 y230 w660", "• Win+K Bluetooth Remap: Redirect cast menu to open the modern Bluetooth flyout panel natively.")
+    MyGui.Add("Text", "x40 y255 w660", "• Conflict Reference: Interactive searchable database containing standard OS and browser hotkeys.")
+    MyGui.Add("Text", "x40 y280 w660", "• Premium Core Controls: Quick enabling/disabling, factory resets, and complete shutdown options.")
     
-    MyGui.Add("Text", "x20 y295 w510 c" . (IsSystemLightTheme() ? "555555" : "888888"), "Status: Running (Uses 0% CPU when not processing keystrokes)")
-    ChkStartup := AddToggleSwitch(MyGui, 20, 325, 0, "Windows Auto-Startup")
+    MyGui.Add("Text", "x20 y315 w700 c" . (IsSystemLightTheme() ? "555555" : "888888"), "Status: Running (Uses 0% CPU when not processing keystrokes)")
+    ChkStartup := AddToggleSwitch(MyGui, 20, 345, 0, "Windows Auto-Startup")
+    
+    MyGui.Add("Text", "x300 y349 c" . ThemeFg, "Interface Theme:")
+    DDLTheme := MyGui.Add("DropDownList", "x420 y345 w110", ["System", "Dark", "Light"])
+    DDLTheme.OnEvent("Change", OnThemeChange)
     
     MyGui.SetFont("norm s10")
     
     ; --- Bottom Controls ---
     TabCtrl.UseTab()
-    ChkEnabled := AddToggleSwitch(MyGui, 20, 498, Enabled, "Enable Typing Remaps")
+    ChkEnabled := AddToggleSwitch(MyGui, 20, 508, Enabled, "Enable Typing Remaps")
     
-    SaveBtn := MyGui.Add("Button", "x300 y492 w110 h30 Default", "Save & Apply")
+    QuitBtn := MyGui.Add("Button", "x230 y502 w120 h32", "Quit KeyMapper")
+    QuitBtn.OnEvent("Click", OnQuitClick)
+    
+    ResetBtn := MyGui.Add("Button", "x360 y502 w140 h32", "Reset to Defaults")
+    ResetBtn.OnEvent("Click", OnResetDefaults)
+    
+    SaveBtn := MyGui.Add("Button", "x510 y502 w120 h32 Default", "Save & Apply")
     SaveBtn.OnEvent("Click", OnSaveClick)
     
-    CloseBtn := MyGui.Add("Button", "x420 y492 w110 h30", "Close to Tray")
+    CloseBtn := MyGui.Add("Button", "x640 y502 w120 h32", "Close to Tray")
     CloseBtn.OnEvent("Click", (*) => MyGui.Hide())
     
     SetGuiValues()
@@ -723,7 +743,7 @@ CreateGui(startTab := 1) {
     
     ; Select initial start tab index
     TabCtrl.Value := startTab
-    MyGui.Show()
+    MyGui.Show("w780 h550")
 }
 
 GetIndexForModifier(name) {
@@ -946,7 +966,6 @@ OnSaveClick(*) {
     IniWrite(GetToggleValue(ChkSelectToStartOfLine), SettingsFile, "Hotkeys", "SelectToStartOfLine")
     IniWrite(GetToggleValue(ChkMoveToEndOfLine), SettingsFile, "Hotkeys", "MoveToEndOfLine")
     IniWrite(GetToggleValue(ChkMoveToStartOfLine), SettingsFile, "Hotkeys", "MoveToStartOfLine")
-    IniWrite(GetToggleValue(GetToggleValue(ChkMoveToTop)), SettingsFile, "Hotkeys", "MoveToTop") ; safety check
     IniWrite(GetToggleValue(ChkMoveToTop), SettingsFile, "Hotkeys", "MoveToTop")
     IniWrite(GetToggleValue(ChkMoveToBottom), SettingsFile, "Hotkeys", "MoveToBottom")
     IniWrite(GetToggleValue(ChkSelectToTop), SettingsFile, "Hotkeys", "SelectToTop")
@@ -996,9 +1015,134 @@ SetStartup(enable) {
     }
 }
 
+OnThemeChange(Ctrl, *) {
+    global SettingsFile, MyGui
+    IniWrite(Ctrl.Text, SettingsFile, "General", "Theme")
+    
+    ; Re-open to the "About" tab (Tab 5) instantly so they stay on the same tab
+    activeTab := 5
+    
+    if (MyGui) {
+        MyGui.Destroy()
+        MyGui := ""
+    }
+    LoadTheme()
+    ShowGui(activeTab)
+}
+
+OnQuitClick(*) {
+    if (MsgBox("Are you sure you want to completely quit KeyMapper? Keyboard remappings will stop working.", "Quit KeyMapper", "YesNo Icon!") == "Yes") {
+        ExitApp()
+    }
+}
+
+OnResetDefaults(*) {
+    global SettingsFile
+    if (MsgBox("Are you sure you want to reset all configurations to their original factory defaults? This will erase all your custom modifiers, hotkeys, and app exclusions.", "Reset to Defaults", "YesNo Icon!") == "Yes") {
+        try {
+            if FileExist(SettingsFile) {
+                FileDelete(SettingsFile)
+            }
+            StartupLnk := A_Startup "\KeyMapper.lnk"
+            if FileExist(StartupLnk) {
+                FileDelete(StartupLnk)
+            }
+            TrayTip("KeyMapper", "All configurations reset to defaults! Reloading engine...", 1)
+            Sleep(500)
+            Reload()
+        } catch as err {
+            MsgBox("Error resetting to defaults: " . err.Message, "Reset Error", "Iconx")
+        }
+    }
+}
+
 ; ==============================================================================
 ; EXCLUSIONS MANAGEMENT SYSTEM
 ; ==============================================================================
+
+HasExclusion(exeName) {
+    global ExclusionAppsList
+    for app in ExclusionAppsList {
+        if (StrLower(app) == StrLower(exeName)) {
+            return true
+        }
+    }
+    return false
+}
+
+ScanAndBuildAppList() {
+    global InstalledApps, ExclusionIL, DefaultIconIdx, ExclusionAppsList
+    
+    InstalledApps := []
+    seenExes := Map()
+    
+    ; Create ImageList
+    ExclusionIL := IL_Create(10, 10, false)
+    DefaultIconIdx := IL_Add(ExclusionIL, "shell32.dll", 3) ; Fallback generic application icon
+    
+    ; 1. Add default common system apps
+    systemApps := [
+        {name: "Windows Terminal", exe: "windowsterminal.exe", path: "C:\Users\" A_UserName "\AppData\Local\Microsoft\WindowsApps\wt.exe"},
+        {name: "Command Prompt", exe: "cmd.exe", path: A_WinDir "\System32\cmd.exe"},
+        {name: "PowerShell", exe: "powershell.exe", path: A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"}
+    ]
+    for app in systemApps {
+        seenExes[app.exe] := app
+    }
+    
+    ; 2. Add currently excluded apps from ini
+    for appName in ExclusionAppsList {
+        if (appName == "")
+            continue
+        exeLower := StrLower(appName)
+        if (!seenExes.Has(exeLower)) {
+            nameNoExt := StrReplace(exeLower, ".exe", "")
+            nameNoExt := Format("{:T}", nameNoExt)
+            seenExes[exeLower] := {name: nameNoExt, exe: exeLower, path: ""}
+        }
+    }
+    
+    ; 3. Scan start menu folders
+    dirs := [A_StartMenuCommon "\Programs", A_StartMenu "\Programs"]
+    for dir in dirs {
+        if !DirExist(dir)
+            continue
+        Loop Files, dir "\*.lnk", "R" {
+            try {
+                FileGetShortcut(A_LoopFileFullPath, &target, &dirOut, &args, &desc, &icon, &iconNum, &runState)
+                if (target != "" and InStr(target, ".exe") and !InStr(target, "uninstall") and !InStr(target, "helper")) {
+                    SplitPath(target, &exeName, &outDir, &outExt, &nameNoExt)
+                    exeNameLower := StrLower(exeName)
+                    if (!seenExes.Has(exeNameLower)) {
+                        seenExes[exeNameLower] := {name: nameNoExt, exe: exeNameLower, path: target}
+                    }
+                }
+            }
+        }
+    }
+    
+    ; 4. Populate array and load icons
+    for exe, appInfo in seenExes {
+        iconIdx := 0
+        if (appInfo.path != "") {
+            try {
+                iconIdx := IL_Add(ExclusionIL, appInfo.path, 1)
+            }
+        }
+        if (iconIdx == 0) {
+            ; Try loading by exe name
+            try {
+                iconIdx := IL_Add(ExclusionIL, appInfo.exe, 1)
+            }
+        }
+        if (iconIdx == 0) {
+            iconIdx := DefaultIconIdx
+        }
+        
+        appInfo.iconIdx := iconIdx
+        InstalledApps.Push(appInfo)
+    }
+}
 
 OnSearchExclusionChange(*) {
     global SearchExclusionEdit
@@ -1006,17 +1150,42 @@ OnSearchExclusionChange(*) {
 }
 
 PopulateExclusionLV(query := "") {
-    global ExclusionLV, ExclusionAppsList
+    global ExclusionLV, InstalledApps
     ExclusionLV.Delete()
     
     query := StrLower(query)
-    for appName in ExclusionAppsList {
-        if (appName == "") {
-            continue
+    
+    ; Collect matching applications
+    matches := []
+    for appInfo in InstalledApps {
+        if (query == "" or InStr(StrLower(appInfo.name), query) or InStr(StrLower(appInfo.exe), query)) {
+            matches.Push(appInfo)
         }
-        if (query == "" or InStr(StrLower(appName), query)) {
-            ExclusionLV.Add(, appName)
+    }
+    
+    ; Sort matches alphabetically by Name
+    if (matches.Length > 1) {
+        loop matches.Length {
+            i := A_Index
+            loop matches.Length - i {
+                j := A_Index
+                if (StrCompare(matches[j].name, matches[j+1].name) > 0) {
+                    temp := matches[j]
+                    matches[j] := matches[j+1]
+                    matches[j+1] := temp
+                }
+            }
         }
+    }
+    
+    ; Add matched apps to the ListView
+    for appInfo in matches {
+        isExcl := HasExclusion(appInfo.exe)
+        displayName := appInfo.name
+        if (isExcl) {
+            displayName := "★ " displayName
+        }
+        ExclusionLV.Add("Icon" . appInfo.iconIdx, displayName, appInfo.exe)
     }
 }
 
@@ -1028,14 +1197,17 @@ OnExclusionLVClick(LV, RowNumber) {
         return
     }
     
-    appName := LV.GetText(RowNumber, 1)
+    appName := LV.GetText(RowNumber, 2) ; Retrieve target executable from column 2
     if (appName == "") {
         return
     }
     
+    isTerminal := (appName == "cmd.exe" or appName == "powershell.exe" or appName == "windowsterminal.exe")
+    defaultVal := isTerminal ? "1" : "0"
+    
     caps := IniRead(SettingsFile, "Exclusion_" . appName, "DisableCapsLock", "0") == "1" ? 1 : 0
-    type := IniRead(SettingsFile, "Exclusion_" . appName, "DisableTyping", "0") == "1" ? 1 : 0
-    brow := IniRead(SettingsFile, "Exclusion_" . appName, "DisableBrowser", "0") == "1" ? 1 : 0
+    type := IniRead(SettingsFile, "Exclusion_" . appName, "DisableTyping", defaultVal) == "1" ? 1 : 0
+    brow := IniRead(SettingsFile, "Exclusion_" . appName, "DisableBrowser", defaultVal) == "1" ? 1 : 0
     
     SetToggleState(ChkExclCapsLock, caps)
     SetToggleState(ChkExclTyping, type)
@@ -1043,36 +1215,83 @@ OnExclusionLVClick(LV, RowNumber) {
 }
 
 OnToggleExclusionClick(Ctrl, *) {
-    global ExclusionLV, SettingsFile
+    global ExclusionLV, SettingsFile, ExclusionAppsList, SearchExclusionEdit
     global ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
     
     row := ExclusionLV.GetNext(0)
     if (row == 0) {
-        MsgBox("Please select an application from the exclusions list first.")
+        MsgBox("Please select an application from the list first.", "No Selection", "Icon!")
         return
     }
     
-    appName := ExclusionLV.GetText(row, 1)
+    appName := ExclusionLV.GetText(row, 2)
     if (appName == "") {
         return
     }
     
-    ; Flip toggle button state
-    OnToggleClick(Ctrl)
     val := GetToggleValue(Ctrl)
     
-    ; Save exclusion choice to ini immediately to preserve states during list clicks
+    settingName := ""
     if (Ctrl == ChkExclCapsLock) {
-        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableCapsLock")
+        settingName := "DisableCapsLock"
     } else if (Ctrl == ChkExclTyping) {
-        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableTyping")
+        settingName := "DisableTyping"
     } else if (Ctrl == ChkExclBrowser) {
-        IniWrite(val, SettingsFile, "Exclusion_" . appName, "DisableBrowser")
+        settingName := "DisableBrowser"
+    }
+    
+    if (settingName != "") {
+        IniWrite(val, SettingsFile, "Exclusion_" . appName, settingName)
+        
+        ; Update ExclusionAppsList based on current state of the toggles
+        capsVal := GetToggleValue(ChkExclCapsLock)
+        typeVal := GetToggleValue(ChkExclTyping)
+        browVal := GetToggleValue(ChkExclBrowser)
+        isNowExcluded := (capsVal or typeVal or browVal)
+        
+        exists := false
+        for app in ExclusionAppsList {
+            if (StrLower(app) == StrLower(appName)) {
+                exists := true
+                break
+            }
+        }
+        
+        modifiedList := false
+        if (isNowExcluded and !exists) {
+            ExclusionAppsList.Push(appName)
+            modifiedList := true
+        } else if (!isNowExcluded and exists) {
+            newArray := []
+            for app in ExclusionAppsList {
+                if (StrLower(app) != StrLower(appName)) {
+                    newArray.Push(app)
+                }
+            }
+            ExclusionAppsList := newArray
+            modifiedList := true
+        }
+        
+        if (modifiedList) {
+            SaveExclusionAppsList()
+            
+            ; Re-populate to update stars in real-time
+            query := SearchExclusionEdit.Text
+            PopulateExclusionLV(query)
+            
+            ; Re-select the row
+            loop ExclusionLV.GetCount() {
+                if (ExclusionLV.GetText(A_Index, 2) == appName) {
+                    ExclusionLV.Modify(A_Index, "Select Focus")
+                    break
+                }
+            }
+        }
     }
 }
 
 OnAddExclusionClick(*) {
-    global ExclusionAppsList, SettingsFile
+    global ExclusionAppsList, SettingsFile, SearchExclusionEdit
     
     ib := InputBox("Enter the application process executable name to exclude:`n(e.g., discord.exe or photoshop.exe)", "Add Application Exclusion", "w300 h150")
     if (ib.Result == "OK" and ib.Value != "") {
@@ -1100,22 +1319,35 @@ OnAddExclusionClick(*) {
             IniWrite("1", SettingsFile, "Exclusion_" . appName, "DisableTyping")
             IniWrite("1", SettingsFile, "Exclusion_" . appName, "DisableBrowser")
             
-            PopulateExclusionLV()
+            ; Re-scan and populate
+            ScanAndBuildAppList()
+            PopulateExclusionLV(SearchExclusionEdit.Text)
+            
+            ; Select the new app in the list
+            loop ExclusionLV.GetCount() {
+                if (ExclusionLV.GetText(A_Index, 2) == appName) {
+                    ExclusionLV.Modify(A_Index, "Select Focus")
+                    ; Trigger list click to update toggle button states
+                    OnExclusionLVClick(ExclusionLV, A_Index)
+                    break
+                }
+            }
         }
     }
 }
 
 OnRemoveExclusionClick(*) {
-    global ExclusionLV, ExclusionAppsList, SettingsFile
+    global ExclusionLV, ExclusionAppsList, SettingsFile, SearchExclusionEdit
+    global ChkExclCapsLock, ChkExclTyping, ChkExclBrowser
     
     row := ExclusionLV.GetNext(0)
     if (row == 0) {
-        MsgBox("Please select an application to remove.")
+        MsgBox("Please select an application to remove.", "No Selection", "Icon!")
         return
     }
     
-    appName := ExclusionLV.GetText(row, 1)
-    if (MsgBox("Are you sure you want to remove " . appName . " from exclusions?", "Confirm Exclusion Removal", "YesNo Icon!") == "Yes") {
+    appName := ExclusionLV.GetText(row, 2)
+    if (MsgBox("Are you sure you want to remove " . appName . " from exclusions? This will delete all custom exclusions configured for it.", "Confirm Exclusion Removal", "YesNo Icon!") == "Yes") {
         newArray := []
         for app in ExclusionAppsList {
             if (app != appName) {
@@ -1129,7 +1361,14 @@ OnRemoveExclusionClick(*) {
             IniDelete(SettingsFile, "Exclusion_" . appName)
         }
         
-        PopulateExclusionLV()
+        ; Re-scan and populate
+        ScanAndBuildAppList()
+        PopulateExclusionLV(SearchExclusionEdit.Text)
+        
+        ; Clear exclusions toggles
+        SetToggleState(ChkExclCapsLock, 0)
+        SetToggleState(ChkExclTyping, 0)
+        SetToggleState(ChkExclBrowser, 0)
     }
 }
 

@@ -15,6 +15,7 @@ A lightweight, battery-efficient Windows key remapping utility with a modern Win
 * **Dual Browser Shortcuts (Scoped to Chrome, Firefox, Edge, Brave, Opera):**
   * **Tab Switch (Default: `Ctrl + [` / `Ctrl + ]`):** Jump left/right between open tabs.
   * **History Nav (Default: `Alt + [` / `Alt + ]`):** Go backward/forward in browser history. Native `Alt + Left/Right` remains fully functional.
+* **Win + K Bluetooth Remap:** Redirects the `Win + K` shortcut (originally bound to Cast) to instantly open the modern Windows 11 Bluetooth Quick Settings flyout panel in the Action Center, letting you manage or pair wireless accessories instantly.
 * **Modern Windows 11 Toggle UI:** Fully custom pill-toggles (ON/OFF buttons) that automatically adapt to your Windows system Light/Dark theme.
 * **Shortcuts Conflict Reference:** Searchable real-time directory listing standard Windows/browser hotkeys to prevent overlap.
 * **Terminal Bypass:** Custom text editing shortcuts are automatically bypassed inside CLI environments (Windows Terminal, Cmd, PowerShell) to prevent command conflicts, while CapsLock-to-Tab remains globally active.
