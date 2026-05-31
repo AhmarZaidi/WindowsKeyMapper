@@ -3,7 +3,7 @@
 A lightweight, battery-efficient Windows key remapping utility with a modern Windows 11 system-themed interface (Light/Dark mode) and interactive toggle switches. Built entirely on **AutoHotkey v2**.
 
 <!-- Insert Screenshot Here -->
-<img width="800" height="800" alt="image" src="https://github.com/user-attachments/assets/9c268933-a251-4f83-9b73-30c2c98d9478" />
+<img width="850" height="550" alt="image" src="https://github.com/user-attachments/assets/0450bb47-adfb-443c-aea5-53e133cf998f" />
 
 ### Features
 
